@@ -10,22 +10,22 @@ var (
 	ErrBookAlreadyExists = errors.New("trying to add a book that already exists")
 )
 
-type AddBook struct {
+type Add struct {
 	ID     book.ID
 	Author string
 	Title  string
 }
 
-func (cmd AddBook) validate() error {
+func (cmd Add) validate() error {
 	// we could validate some data on the application layer.
 	// the domain layer should prohibit any actions that would violate the domain rules.
 	return nil
 }
 
-// AddBook adds a new book to the inventory.
+// Add adds a new book to the inventory.
 // Notice that the repository exposes ByID and Save, but this use case makes sure
 // that an error is returned if we try to add a book that already exists.
-func (i *inventory) AddBook(cmd AddBook) error {
+func (i *inventory) Add(cmd Add) error {
 	if err := cmd.validate(); err != nil {
 		return errors.Wrap(err, "invalid command")
 	}

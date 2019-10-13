@@ -32,7 +32,7 @@ func (r *MemoryRepository) Save(b *book.Book) error {
 // AllBooks finds all books given the criteria in q.
 // Note that it imports both the app and domain layer, which is OK by the rules of Clean Architecture.
 // The domain package defines the aggregate, and the app layer the query, which is connected merely to the use case.
-func (r *MemoryRepository) AllBooks(q appBook.ListBooksQuery) ([]*book.Book, error) {
+func (r *MemoryRepository) AllBooks(q appBook.ListQuery) ([]*book.Book, error) {
 	books := []*book.Book{}
 
 	for _, b := range r.books {

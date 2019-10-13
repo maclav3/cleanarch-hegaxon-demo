@@ -6,21 +6,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-type LoanBook struct {
+type Loan struct {
 	BookID   book.ID
 	ReaderID reader.ID
 }
 
-func (cmd LoanBook) validate() error {
+func (cmd Loan) validate() error {
 	// we could validate some data on the application layer.
 	// the domain layer should prohibit any actions that would violate the domain rules.
 	return nil
 }
 
-// LoanBook retrieves a book and a reader and makes the loan.
+// Loan retrieves a book and a reader and makes the loan.
 // Note that the app layer mostly orchestrates retrieving the aggregates and calling the domain methods;
 // It is the domain layer that says which actions are allowed and which aren't.
-func (i *inventory) LoanBook(cmd LoanBook) error {
+func (i *inventory) Loan(cmd Loan) error {
 	if err := cmd.validate(); err != nil {
 		return errors.Wrap(err, "invalid command")
 	}

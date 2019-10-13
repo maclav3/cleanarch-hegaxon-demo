@@ -1,6 +1,8 @@
 package log
 
 import (
+	"encoding/json"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,7 +21,7 @@ const (
 
 type Logger interface {
 	WithField(key string, value interface{}) Logger
-	//WithJSON(key string, value interface{}) Logger
+	WithJSON(key string, value interface{}) Logger
 	WithError(err error) Logger
 
 	Debug(args ...interface{})
@@ -44,13 +46,13 @@ func (l *logrusLogger) WithField(key string, value interface{}) Logger {
 	return newLogger
 }
 
-//func (l *logrusLogger) WithJSON(key string, value interface{}) Logger {
-//	b, err := json.Marshal(value)
-//	if err != nil {
-//		return l.WithField(key, "<could not marshal to json>")
-//	}
-//	return l.WithField(key, string(b))
-//}
+func (l *logrusLogger) WithJSON(key string, value interface{}) Logger {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return l.WithField(key, "<could not marshal to json>")
+	}
+	return l.WithField(key, string(b))
+}
 
 func (l *logrusLogger) WithError(err error) Logger {
 	newLogger := new(logrusLogger)

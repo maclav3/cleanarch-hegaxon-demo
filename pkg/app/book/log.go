@@ -12,10 +12,11 @@ type inventoryLoggingDecorator struct {
 	wrapped Inventory
 }
 
-func (d inventoryLoggingDecorator) ListBooks(q ListBooksQuery) (books []*book.Book, err error) {
+func (d inventoryLoggingDecorator) List(q ListQuery) (books []*book.Book, err error) {
 	logger := d.logger.
 		WithField(log.QueryHandlerKey, inventoryHandlerName).
-		WithField(log.QueryKey, q)
+		WithField(log.MethodKey, "List").
+		WithJSON(log.QueryKey, q)
 	defer func() {
 		if err != nil {
 			logger.WithError(err).Error("could not list books")
@@ -25,13 +26,14 @@ func (d inventoryLoggingDecorator) ListBooks(q ListBooksQuery) (books []*book.Bo
 		logger.Info("list books successful")
 	}()
 
-	return d.wrapped.ListBooks(q)
+	return d.wrapped.List(q)
 }
 
-func (d inventoryLoggingDecorator) AddBook(cmd AddBook) (err error) {
+func (d inventoryLoggingDecorator) Add(cmd Add) (err error) {
 	logger := d.logger.
 		WithField(log.CommandHandlerKey, inventoryHandlerName).
-		WithField(log.CommandKey, cmd)
+		WithField(log.MethodKey, "Add").
+		WithJSON(log.CommandKey, cmd)
 	defer func() {
 		if err != nil {
 			logger.WithError(err).Error("could not add book")
@@ -41,13 +43,14 @@ func (d inventoryLoggingDecorator) AddBook(cmd AddBook) (err error) {
 		logger.Info("add book successful")
 	}()
 
-	return d.wrapped.AddBook(cmd)
+	return d.wrapped.Add(cmd)
 }
 
-func (d inventoryLoggingDecorator) LoanBook(cmd LoanBook) (err error) {
+func (d inventoryLoggingDecorator) Loan(cmd Loan) (err error) {
 	logger := d.logger.
 		WithField(log.CommandHandlerKey, inventoryHandlerName).
-		WithField(log.CommandKey, cmd)
+		WithField(log.MethodKey, "Loan").
+		WithJSON(log.CommandKey, cmd)
 	defer func() {
 		if err != nil {
 			logger.WithError(err).Error("could not add book")
@@ -57,5 +60,5 @@ func (d inventoryLoggingDecorator) LoanBook(cmd LoanBook) (err error) {
 		logger.Info("add book successful")
 	}()
 
-	return d.wrapped.LoanBook(cmd)
+	return d.wrapped.Loan(cmd)
 }

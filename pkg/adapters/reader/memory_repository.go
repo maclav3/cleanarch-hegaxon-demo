@@ -2,17 +2,17 @@ package reader
 
 import "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
 
-type memoryRepository struct {
+type MemoryRepository struct {
 	readers map[reader.ID]*reader.Reader
 }
 
-func NewMemoryRepository() reader.Repository {
-	return &memoryRepository{
+func NewMemoryRepository() *MemoryRepository {
+	return &MemoryRepository{
 		readers: map[reader.ID]*reader.Reader{},
 	}
 }
 
-func (m *memoryRepository) ByID(id reader.ID) (*reader.Reader, error) {
+func (m *MemoryRepository) ByID(id reader.ID) (*reader.Reader, error) {
 	r, ok := m.readers[id]
 	if !ok {
 		return nil, reader.ErrNotFound
@@ -20,7 +20,15 @@ func (m *memoryRepository) ByID(id reader.ID) (*reader.Reader, error) {
 	return r, nil
 }
 
-func (m *memoryRepository) Save(r *reader.Reader) error {
+func (m *MemoryRepository) Save(r *reader.Reader) error {
 	m.readers[r.ID()] = r
 	return nil
+}
+
+func (m *MemoryRepository) All() ([]*reader.Reader, error) {
+	all := []*reader.Reader{}
+	for _, r := range m.readers {
+		all = append(all, r)
+	}
+	return all, nil
 }

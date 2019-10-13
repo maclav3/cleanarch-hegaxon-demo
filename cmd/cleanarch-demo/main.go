@@ -14,7 +14,6 @@ import (
 func main() {
 	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
 	svc := service.NewService(ctx)
-	svc.AddFixtures()
 
 	svc.Logger.Info("Starting service...")
 	err := svc.Run()
@@ -22,6 +21,8 @@ func main() {
 		panic(errors.Wrap(err, "error during service startup"))
 	}
 	svc.Logger.Info("Service started")
+
+	svc.AddFixtures()
 
 	s := make(chan os.Signal)
 	signal.Notify(s, syscall.SIGTERM)

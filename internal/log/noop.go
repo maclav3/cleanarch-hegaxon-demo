@@ -10,6 +10,10 @@ func (noopLogger) WithField(key string, value interface{}) Logger {
 	return noopLogger{}
 }
 
+func (noopLogger) WithJSON(key string, value interface{}) Logger {
+	return noopLogger{}
+}
+
 func (noopLogger) WithError(err error) Logger {
 	return noopLogger{}
 }

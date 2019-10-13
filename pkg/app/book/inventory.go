@@ -7,15 +7,15 @@ import (
 )
 
 type Inventory interface {
-	ListBooks(q ListBooksQuery) ([]*book.Book, error)
-	AddBook(cmd AddBook) error
-	LoanBook(cmd LoanBook) error
+	List(q ListQuery) ([]*book.Book, error)
+	Add(cmd Add) error
+	Loan(cmd Loan) error
 }
 
 type bookRepo interface {
 	// book.Repository interface provides the basic book repository methods.
 	book.Repository
-	// listBooksRepository provides the methods needed for handling the ListBooks query.
+	// listBooksRepository provides the methods needed for handling the List query.
 	listBooksRepository
 }
 

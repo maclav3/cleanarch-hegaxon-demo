@@ -6,17 +6,17 @@ import (
 )
 
 // listBooksRepository defines the methods that we expect of a repository
-// that is able to support a ListBooks query.
+// that is able to support a List query.
 type listBooksRepository interface {
-	AllBooks(q ListBooksQuery) ([]*book.Book, error)
+	AllBooks(q ListQuery) ([]*book.Book, error)
 }
 
-type ListBooksQuery struct {
+type ListQuery struct {
 	// Loaned, if not-nil, this will filter books by their loaned status.
 	Loaned *bool
 }
 
-func (i *inventory) ListBooks(q ListBooksQuery) ([]*book.Book, error) {
+func (i *inventory) List(q ListQuery) ([]*book.Book, error) {
 	books, err := i.bookRepo.AllBooks(q)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not list books")

@@ -5,18 +5,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 	adaptersBook "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/book"
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/reader"
+	adaptersReader "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/reader"
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/book"
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/reader"
+	"github.com/pkg/errors"
 )
 
 type Service struct {
 	Logger log.Logger
 
-	BookInventory book.Inventory
+	BookInventory  book.Inventory
+	ReaderRegistry reader.Registry
 
 	onStartup  []callback
 	onShutdown []callback
@@ -53,9 +54,10 @@ func NewService(ctx context.Context) *Service {
 	// the simple in-memory repositories are enough for this simple demonstration app.
 	// in production, relational or NoSQL databases might be used to satisfy the dependencies of the app layer.
 	bookRepository := adaptersBook.NewMemoryRepository()
-	readerRepository := reader.NewMemoryRepository()
+	readerRepository := adaptersReader.NewMemoryRepository()
 
 	service.BookInventory = book.NewBookInventory(service.Logger, bookRepository, readerRepository)
+	service.ReaderRegistry = reader.NewRegistry(service.Logger, readerRepository)
 
 	go func() {
 		// shutdown on ctx close

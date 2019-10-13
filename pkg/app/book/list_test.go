@@ -25,12 +25,12 @@ func TestMemoryRepository_ListBooks(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		query           appBook.ListBooksQuery
+		query           appBook.ListQuery
 		expectedBookIDs []domainBook.ID
 	}{
 		{
 			name: "no_filters",
-			query: appBook.ListBooksQuery{
+			query: appBook.ListQuery{
 				Loaned: nil,
 			},
 			expectedBookIDs: []domainBook.ID{
@@ -40,7 +40,7 @@ func TestMemoryRepository_ListBooks(t *testing.T) {
 		},
 		{
 			name: "only_loaned",
-			query: appBook.ListBooksQuery{
+			query: appBook.ListQuery{
 				Loaned: ptrBool(true),
 			},
 			expectedBookIDs: []domainBook.ID{
@@ -49,7 +49,7 @@ func TestMemoryRepository_ListBooks(t *testing.T) {
 		},
 		{
 			name: "only_unloaned",
-			query: appBook.ListBooksQuery{
+			query: appBook.ListQuery{
 				Loaned: ptrBool(false),
 			},
 			expectedBookIDs: []domainBook.ID{
@@ -63,7 +63,7 @@ func TestMemoryRepository_ListBooks(t *testing.T) {
 			t.Parallel()
 			tc := testCases[i]
 
-			books, err := inventory.ListBooks(tc.query)
+			books, err := inventory.List(tc.query)
 			require.NoError(t, err)
 
 			bookIDs := make([]domainBook.ID, len(books))
