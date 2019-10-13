@@ -12,15 +12,27 @@ type Inventory interface {
 	LoanBook(cmd LoanBook) error
 }
 
+type bookRepo interface {
+	// book.Repository interface provides the basic book repository methods.
+	book.Repository
+	// listBooksRepository provides the methods needed for handling the ListBooks query.
+	listBooksRepository
+}
+
+type readerRepo interface {
+	// reader.Repository interface provides the basic reader repository methods.
+	ByID(reader.ID) (*reader.Reader, error)
+}
+
 type inventory struct {
-	bookRepo   book.Repository
-	readerRepo reader.Repository
+	bookRepo   bookRepo
+	readerRepo readerRepo
 }
 
 func NewBookInventory(
 	logger log.Logger,
-	bookRepo book.Repository,
-	readerRepo reader.Repository,
+	bookRepo bookRepo,
+	readerRepo readerRepo,
 ) Inventory {
 	// we panic if any dependency is nil
 	if logger == nil {

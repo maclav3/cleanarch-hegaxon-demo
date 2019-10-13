@@ -43,3 +43,19 @@ func (d inventoryLoggingDecorator) AddBook(cmd AddBook) (err error) {
 
 	return d.wrapped.AddBook(cmd)
 }
+
+func (d inventoryLoggingDecorator) LoanBook(cmd LoanBook) (err error) {
+	logger := d.logger.
+		WithField(log.CommandHandlerKey, inventoryHandlerName).
+		WithField(log.CommandKey, cmd)
+	defer func() {
+		if err != nil {
+			logger.WithError(err).Error("could not add book")
+			return
+		}
+
+		logger.Info("add book successful")
+	}()
+
+	return d.wrapped.LoanBook(cmd)
+}
