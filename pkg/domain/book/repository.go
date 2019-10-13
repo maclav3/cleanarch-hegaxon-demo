@@ -1,6 +1,8 @@
 package book
 
-import "github.com/pkg/errors"
+import (
+	"github.com/pkg/errors"
+)
 
 var (
 	// ErrNotFound occurs when a book could not be found.

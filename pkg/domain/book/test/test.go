@@ -59,3 +59,14 @@ func NewBook(t *testing.T) *book.Book {
 
 	return b
 }
+
+func NewLoanedBook(t *testing.T) *book.Book {
+	bookID := book.ID(uuid.Must(uuid.NewV4()).String())
+	b, err := book.NewBook(bookID, "A. Mickiewicz", "Pan Tadeusz")
+	require.NoError(t, err, "expected no error creating a new book aggregate")
+
+	r := test.NewActiveReader(t)
+	err = b.Loan(r)
+	require.NoError(t, err)
+	return b
+}
