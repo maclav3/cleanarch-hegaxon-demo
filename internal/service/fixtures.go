@@ -1,10 +1,6 @@
 package service
 
 import (
-	"fmt"
-
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
-
 	book2 "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
 
 	readerCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/reader"
@@ -51,23 +47,6 @@ func (s *Service) AddFixtures() {
 		BookID:   "4",
 		ReaderID: "2",
 	}))
-
-	loanedList, err := s.ListBooksQueryHandler.Query(book.ListQuery{
-		Loaned: func(b bool) *bool { return &b }(true),
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	unloanedList, err := s.ListBooksQueryHandler.Query(book.ListQuery{
-		Loaned: func(b bool) *bool { return &b }(false),
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("LOANED BOOKS:\n%+v\n\n", loanedList)
-	fmt.Printf("UNLOANED BOOKS:\n%+v\n\n", unloanedList)
 }
 
 func assertNoError(err error) {

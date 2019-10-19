@@ -5,18 +5,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/service"
 	"github.com/pkg/errors"
 )
 
 func main() {
-	ctx, _ := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx := context.Background()
 	svc := service.NewService(ctx)
 
 	svc.Logger.Info("Starting service...")
-	err := svc.Run()
+	err := svc.Run(ctx)
 	if err != nil {
 		panic(errors.Wrap(err, "error during service startup"))
 	}
@@ -25,10 +24,10 @@ func main() {
 	svc.AddFixtures()
 
 	s := make(chan os.Signal)
-	signal.Notify(s, syscall.SIGTERM)
+	signal.Notify(s, syscall.SIGTERM, os.Interrupt)
 	go func() {
 		<-s
-		svc.Logger.Info("SIGINT caught, stopping")
+		svc.Logger.Info("SIGTERM/SIGINT caught, stopping")
 		err = svc.Shutdown()
 		if err != nil {
 			panic(errors.Wrap(err, "error during service shutdown caused by SIGINT"))

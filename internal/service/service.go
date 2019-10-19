@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/port/cli"
+
 	bookCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
 	bookQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
 
@@ -29,8 +31,8 @@ type Service struct {
 	ActivateReaderCommandHandler   readerCommand.ActivateReaderCommandHandler
 	DeactivateReaderCommandHandler readerCommand.DeactivateReaderCommandHandler
 
-	onStartup  []callback
-	onShutdown []callback
+	onStartup  []startupCallback
+	onShutdown []shutdownCallback
 
 	// callbackTimeout limits the time spent on startup/shutdown callbacks. Defaults to 30s per each callback.
 	callbackTimeout time.Duration
@@ -47,10 +49,11 @@ type Service struct {
 // Shutdown() then needs to be called to execute a graceful shutdown, closing the components in an ordered way.
 func NewService(ctx context.Context) *Service {
 	service := &Service{
-		onStartup:  []callback{},
-		onShutdown: []callback{},
+		onStartup:  []startupCallback{},
+		onShutdown: []shutdownCallback{},
 
-		closeCh: make(chan struct{}),
+		callbackTimeout: 10 * time.Second,
+		closeCh:         make(chan struct{}),
 
 		runMutex:      sync.Mutex{},
 		running:       false,
@@ -75,6 +78,17 @@ func NewService(ctx context.Context) *Service {
 	service.ActivateReaderCommandHandler = readerCommand.NewActivateReaderCommandHandler(service.Logger, readerRepository)
 	service.DeactivateReaderCommandHandler = readerCommand.NewDeactivateReaderCommandHandler(service.Logger, readerRepository)
 
+	// initialize the ports.
+	// there is a single simple CLI router that is running while the application lives
+	cliRouter := cli.NewRouter()
+	service.onStartupShutdown(
+		func(ctx context.Context) error {
+			go cliRouter.Run(ctx)
+			return nil
+		},
+		cliRouter.Shutdown,
+	)
+
 	go func() {
 		// shutdown on ctx close
 		<-ctx.Done()
@@ -90,7 +104,7 @@ func NewService(ctx context.Context) *Service {
 
 // Run executes all the registered startup functions (spinning up servers etc.)
 // Run exits with error if startup was unsuccessful, or returns after service is up and running.
-func (s *Service) Run() error {
+func (s *Service) Run(ctx context.Context) error {
 	s.runMutex.Lock()
 	if s.running {
 		return nil
@@ -101,7 +115,7 @@ func (s *Service) Run() error {
 	errChan := make(chan error)
 	for _, callback := range s.onStartup {
 		go func() {
-			errChan <- callback()
+			errChan <- callback(ctx)
 		}()
 
 		select {
@@ -149,4 +163,10 @@ func (s *Service) Shutdown() error {
 	return nil
 }
 
-type callback func() error
+func (s *Service) onStartupShutdown(startup startupCallback, shutdown shutdownCallback) {
+	s.onStartup = append(s.onStartup, startup)
+	s.onShutdown = append(s.onShutdown, shutdown)
+}
+
+type startupCallback func(ctx context.Context) error
+type shutdownCallback func() error
