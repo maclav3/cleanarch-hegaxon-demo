@@ -12,8 +12,17 @@ type Loan struct {
 }
 
 func (cmd Loan) validate() error {
-	// we could validate some data on the application layer.
-	// the domain layer should prohibit any actions that would violate the domain rules.
+	// we perform some simple data validation on the application layer.
+	// however, it is the responsibility of the  domain layer
+	// to should prohibit any actions that would violate the domain rules.
+	if cmd.BookID.Empty() {
+		return errors.New("book id is empty")
+	}
+
+	if cmd.ReaderID.Empty() {
+		return errors.New("reader id is empty")
+	}
+
 	return nil
 }
 

@@ -17,8 +17,13 @@ type Add struct {
 }
 
 func (cmd Add) validate() error {
-	// we could validate some data on the application layer.
-	// the domain layer should prohibit any actions that would violate the domain rules.
+	// we perform some simple data validation on the application layer.
+	// however, it is the responsibility of the  domain layer
+	// to should prohibit any actions that would violate the domain rules.
+	if cmd.ID.Empty() {
+		return errors.New("book id is empty")
+	}
+
 	return nil
 }
 
@@ -30,9 +35,7 @@ func (i *inventory) Add(cmd Add) error {
 		return errors.Wrap(err, "invalid command")
 	}
 
-	id := book.ID(cmd.ID)
-
-	_, err := i.bookRepo.ByID(id)
+	_, err := i.bookRepo.ByID(cmd.ID)
 	if err == nil {
 		return errors.Wrap(ErrBookAlreadyExists, cmd.ID.String())
 	}
@@ -41,7 +44,7 @@ func (i *inventory) Add(cmd Add) error {
 	}
 
 	// book not found, carry on
-	newBook, err := book.NewBook(id, cmd.Author, cmd.Title)
+	newBook, err := book.NewBook(cmd.ID, cmd.Author, cmd.Title)
 	if err != nil {
 		return errors.Wrap(err, "could not create a new book")
 	}
