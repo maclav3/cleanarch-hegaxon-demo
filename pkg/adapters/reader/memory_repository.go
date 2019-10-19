@@ -1,6 +1,9 @@
 package reader
 
-import "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
+import (
+	query "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/reader"
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
+)
 
 type MemoryRepository struct {
 	readers map[reader.ID]*reader.Reader
@@ -25,7 +28,7 @@ func (m *MemoryRepository) Save(r *reader.Reader) error {
 	return nil
 }
 
-func (m *MemoryRepository) All() ([]*reader.Reader, error) {
+func (m *MemoryRepository) ListReaders(q query.ListQuery) ([]*reader.Reader, error) {
 	all := []*reader.Reader{}
 	for _, r := range m.readers {
 		all = append(all, r)

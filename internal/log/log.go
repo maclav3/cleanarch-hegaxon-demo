@@ -15,8 +15,6 @@ const (
 	QueryHandlerKey = "query_handler"
 	// QueryKey is used by query handlers to annotate logs with the query passed to the handler.
 	QueryKey = "query"
-	// MethodKey is used by query and command handlers to annotate logs with the method that was called.
-	MethodKey = "method"
 )
 
 type Logger interface {

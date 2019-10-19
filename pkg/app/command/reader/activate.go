@@ -1,9 +1,38 @@
 package reader
 
 import (
+	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
+
 	"github.com/pkg/errors"
 )
+
+type ActivateReaderCommandHandler interface {
+	Handle(cmd Activate) error
+}
+
+type activateReaderCommandHandler struct {
+	repo reader.Repository
+}
+
+func NewActivateReaderCommandHandler(logger log.Logger, repo reader.Repository) ActivateReaderCommandHandler {
+	// we panic if any dependency is nil
+	if logger == nil {
+		panic("logger is nil")
+	}
+	// because it is not a recoverable state
+	// and should be fixed in compile time
+	if repo == nil {
+		panic("readerRepo is nil")
+	}
+
+	return &activateReaderCommandHandlerLogger{
+		logger: logger,
+		wrapped: &activateReaderCommandHandler{
+			repo: repo,
+		},
+	}
+}
 
 type Activate struct {
 	ID reader.ID
@@ -19,13 +48,13 @@ func (cmd Activate) validate() error {
 	return nil
 }
 
-func (r *registry) Activate(cmd Activate) error {
+func (h *activateReaderCommandHandler) Handle(cmd Activate) error {
 	err := cmd.validate()
 	if err != nil {
 		return errors.Wrap(err, "invalid command")
 	}
 
-	rdr, err := r.readerRepo.ByID(cmd.ID)
+	rdr, err := h.repo.ByID(cmd.ID)
 	if err != nil {
 		return errors.Wrap(err, "could not retrieve reader by ID")
 	}
@@ -35,7 +64,7 @@ func (r *registry) Activate(cmd Activate) error {
 		return errors.Wrap(err, "could not activate reader")
 	}
 
-	err = r.readerRepo.Save(rdr)
+	err = h.repo.Save(rdr)
 	if err != nil {
 		return errors.Wrap(err, "could not persist reader")
 	}

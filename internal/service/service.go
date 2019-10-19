@@ -5,19 +5,29 @@ import (
 	"sync"
 	"time"
 
+	bookCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
+	bookQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
+
+	readerCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/reader"
+	readerQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/reader"
+
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 	adaptersBook "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/book"
 	adaptersReader "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/reader"
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/book"
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/reader"
 	"github.com/pkg/errors"
 )
 
 type Service struct {
 	Logger log.Logger
 
-	BookInventory  book.Inventory
-	ReaderRegistry reader.Registry
+	ListBooksQueryHandler  bookQuery.ListBooksQueryHandler
+	AddBookCommandHandler  bookCommand.AddBookCommandHandler
+	LoanBookCommandHandler bookCommand.LoanBookCommandHandler
+
+	ListReadersQueryHandler        readerQuery.ListReadersQueryHandler
+	AddReaderCommandHandler        readerCommand.AddReaderCommandHandler
+	ActivateReaderCommandHandler   readerCommand.ActivateReaderCommandHandler
+	DeactivateReaderCommandHandler readerCommand.DeactivateReaderCommandHandler
 
 	onStartup  []callback
 	onShutdown []callback
@@ -56,8 +66,14 @@ func NewService(ctx context.Context) *Service {
 	bookRepository := adaptersBook.NewMemoryRepository()
 	readerRepository := adaptersReader.NewMemoryRepository()
 
-	service.BookInventory = book.NewBookInventory(service.Logger, bookRepository, readerRepository)
-	service.ReaderRegistry = reader.NewRegistry(service.Logger, readerRepository)
+	service.ListBooksQueryHandler = bookQuery.NewListBooksQueryHandler(service.Logger, bookRepository)
+	service.AddBookCommandHandler = bookCommand.NewAddBookCommandHandler(service.Logger, bookRepository)
+	service.LoanBookCommandHandler = bookCommand.NewLoanBookCommandHandler(service.Logger, bookRepository, readerRepository)
+
+	service.ListReadersQueryHandler = readerQuery.NewListReadersQueryHandler(service.Logger, readerRepository)
+	service.AddReaderCommandHandler = readerCommand.NewAddReaderCommandHandler(service.Logger, readerRepository)
+	service.ActivateReaderCommandHandler = readerCommand.NewActivateReaderCommandHandler(service.Logger, readerRepository)
+	service.DeactivateReaderCommandHandler = readerCommand.NewDeactivateReaderCommandHandler(service.Logger, readerRepository)
 
 	go func() {
 		// shutdown on ctx close

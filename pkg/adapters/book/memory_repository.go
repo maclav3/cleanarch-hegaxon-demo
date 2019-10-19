@@ -1,7 +1,7 @@
 package book
 
 import (
-	appBook "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/book"
+	book3 "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book"
 )
 
@@ -32,7 +32,7 @@ func (r *MemoryRepository) Save(b *book.Book) error {
 // AllBooks finds all books given the criteria in q.
 // Note that it imports both the app and domain layer, which is OK by the rules of Clean Architecture.
 // The domain package defines the aggregate, and the app layer the query, which is connected merely to the use case.
-func (r *MemoryRepository) AllBooks(q appBook.ListQuery) ([]*book.Book, error) {
+func (r *MemoryRepository) AllBooks(q book3.ListQuery) ([]*book.Book, error) {
 	books := []*book.Book{}
 
 	for _, b := range r.books {

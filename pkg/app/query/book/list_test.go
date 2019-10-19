@@ -5,18 +5,17 @@ import (
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/book"
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/reader"
-	appBook "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/book"
-	domainBook "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book"
+	bookQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
+	bookDomain "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book"
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book/test"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMemoryRepository_ListBooks(t *testing.T) {
+func Test_ListBooks(t *testing.T) {
 	bookRepo := book.NewMemoryRepository()
-	readerRepo := reader.NewMemoryRepository()
-	inventory := appBook.NewBookInventory(log.NewNoopLogger(), bookRepo, readerRepo)
+	queryHandler := bookQuery.NewListBooksQueryHandler(log.NewNoopLogger(), bookRepo)
 
 	unloanedBook := test.NewBook(t)
 	require.NoError(t, bookRepo.Save(unloanedBook))
@@ -25,34 +24,34 @@ func TestMemoryRepository_ListBooks(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		query           appBook.ListQuery
-		expectedBookIDs []domainBook.ID
+		query           bookQuery.ListQuery
+		expectedBookIDs []bookDomain.ID
 	}{
 		{
 			name: "no_filters",
-			query: appBook.ListQuery{
+			query: bookQuery.ListQuery{
 				Loaned: nil,
 			},
-			expectedBookIDs: []domainBook.ID{
+			expectedBookIDs: []bookDomain.ID{
 				unloanedBook.ID(),
 				loanedBook.ID(),
 			},
 		},
 		{
 			name: "only_loaned",
-			query: appBook.ListQuery{
+			query: bookQuery.ListQuery{
 				Loaned: ptrBool(true),
 			},
-			expectedBookIDs: []domainBook.ID{
+			expectedBookIDs: []bookDomain.ID{
 				loanedBook.ID(),
 			},
 		},
 		{
 			name: "only_unloaned",
-			query: appBook.ListQuery{
+			query: bookQuery.ListQuery{
 				Loaned: ptrBool(false),
 			},
-			expectedBookIDs: []domainBook.ID{
+			expectedBookIDs: []bookDomain.ID{
 				unloanedBook.ID(),
 			},
 		},
@@ -63,10 +62,10 @@ func TestMemoryRepository_ListBooks(t *testing.T) {
 			t.Parallel()
 			tc := testCases[i]
 
-			books, err := inventory.List(tc.query)
+			books, err := queryHandler.Query(tc.query)
 			require.NoError(t, err)
 
-			bookIDs := make([]domainBook.ID, len(books))
+			bookIDs := make([]bookDomain.ID, len(books))
 			for j := range books {
 				bookIDs[j] = books[j].ID()
 			}
