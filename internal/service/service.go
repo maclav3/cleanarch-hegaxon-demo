@@ -63,12 +63,14 @@ func NewService(ctx context.Context) *Service {
 
 	service.Logger = log.NewLogger("cleanarch-hexagon-demo")
 
-	// initialize the repositories.
-	// the simple in-memory repositories are enough for this simple demonstration app.
-	// in production, relational or NoSQL databases might be used to satisfy the dependencies of the app layer.
+	// Initialize the repositories.
+	// The simple in-memory repositories are enough for this simple demonstration app.
+	// In production, relational or NoSQL databases might be used to satisfy the dependencies of the app layer.
 	bookRepository := adaptersBook.NewMemoryRepository()
 	readerRepository := adaptersReader.NewMemoryRepository()
 
+	// Here, we construct and inject all dependencies manually. However, in a larger project, this becomes increasingly hard.
+	// In this case, some kind of automated DI approach is preferred, for example github.com/google/wire.
 	service.ListBooksQueryHandler = bookQuery.NewListBooksQueryHandler(service.Logger, bookRepository)
 	service.AddBookCommandHandler = bookCommand.NewAddBookCommandHandler(service.Logger, bookRepository)
 	service.LoanBookCommandHandler = bookCommand.NewLoanBookCommandHandler(service.Logger, bookRepository, readerRepository)
@@ -78,8 +80,8 @@ func NewService(ctx context.Context) *Service {
 	service.ActivateReaderCommandHandler = readerCommand.NewActivateReaderCommandHandler(service.Logger, readerRepository)
 	service.DeactivateReaderCommandHandler = readerCommand.NewDeactivateReaderCommandHandler(service.Logger, readerRepository)
 
-	// initialize the ports.
-	// there is a single simple CLI router that is running while the application lives
+	// Initialize the ports.
+	// There is a single simple CLI router that is running while the application lives
 	cliRouter := cli.NewRouter()
 	service.onStartupShutdown(
 		func(ctx context.Context) error {
@@ -106,10 +108,10 @@ func NewService(ctx context.Context) *Service {
 // Run exits with error if startup was unsuccessful, or returns after service is up and running.
 func (s *Service) Run(ctx context.Context) error {
 	s.runMutex.Lock()
+	defer s.runMutex.Unlock()
 	if s.running {
 		return nil
 	}
-	s.runMutex.Unlock()
 	s.running = true
 
 	errChan := make(chan error)
@@ -137,10 +139,10 @@ func (s *Service) Running() <-chan struct{} {
 
 func (s *Service) Shutdown() error {
 	s.shutdownMutex.Lock()
+	defer s.shutdownMutex.Unlock()
 	if s.shuttingDown {
 		return nil
 	}
-	s.shutdownMutex.Unlock()
 	s.shuttingDown = true
 
 	errChan := make(chan error)
