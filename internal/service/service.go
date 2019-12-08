@@ -83,13 +83,10 @@ func NewService(ctx context.Context) *Service {
 	// Initialize the ports.
 	// There is a single simple CLI router that is running while the application lives
 	// It captures text from a socket with zeroMQ, and runs cobra commands with the text.
-	cliRouter := cli.NewRouter(service.Logger, "tcp://localhost:5555")
+	cliRouter := cli.NewRouter(service.Logger, "localhost:5555")
 	service.onStartupShutdown(
-		func(ctx context.Context) error {
-			go cliRouter.Run(ctx)
-			return nil
-		},
-		cliRouter.Shutdown,
+		cliRouter.Run,
+		cliRouter.Close,
 	)
 
 	go func() {

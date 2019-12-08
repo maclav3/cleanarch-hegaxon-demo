@@ -2,14 +2,12 @@ package cli
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/nanomsg"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	zmq "github.com/zeromq/gomq"
-	"github.com/zeromq/gomq/zmtp"
 )
 
 type Router struct {
@@ -18,6 +16,7 @@ type Router struct {
 	rootCmd  *cobra.Command
 	logger   log.Logger
 	address  string
+	server   *nanomsg.Server
 }
 
 func NewRouter(logger log.Logger, address string) *Router {
@@ -36,67 +35,41 @@ func NewRouter(logger log.Logger, address string) *Router {
 }
 
 // Run starts the Router router and keeps parsing commands from the standard input.
-// It blocks while the router is running.
-func (r *Router) Run(ctx context.Context) {
-	fmt.Println("Enter command or type 'help' to show available commands.")
+func (r *Router) Run(ctx context.Context) error {
 	ctx, r.cancelFn = context.WithCancel(ctx)
 
 	r.running = make(chan struct{})
 	defer close(r.running)
-	commandsCh := make(chan string)
-	responseCh := make(chan string)
-	go func() {
-		err := r.listen(ctx, commandsCh, responseCh)
-		if err != nil {
 
-		}
-	}()
-	go func() {
-		<-ctx.Done()
-		close(commandsCh)
-		close(responseCh)
-	}()
-
-	for cmd := range commandsCh {
-		r.logger.WithField("cmd", cmd).Debug("command received")
-
-		// handle cmd
-		resp := "OK"
-		responseCh <- resp
-	}
-}
-
-func (r Router) listen(ctx context.Context, commandsCh, responseCh chan string) error {
-	server := zmq.NewServer(zmtp.NewSecurityNull())
-	_, err := server.Bind(r.address)
+	var err error
+	r.server, err = nanomsg.NewServer(ctx, r.logger, r.address)
 	if err != nil {
-		return errors.Wrap(err, "could not bind zmq server")
+		return errors.Wrap(err, "Could not run nanomsg server")
 	}
-	go func() {
-		<-ctx.Done()
-		server.Close()
-	}()
 
+	msgCh, err := r.server.Listen()
 	if err != nil {
-		return errors.Wrap(err, "could not bind socket to address")
+		return errors.Wrap(err, "error listening to messages")
 	}
 
-	for cmd := range server.RecvChannel() {
-		if cmd.MessageType != zmtp.UserMessage {
-			continue
-		}
-		r.logger.WithField("msg", fmt.Sprintf("%+v", cmd)).Debug("command received")
-		commandsCh <- string(cmd.Body[0])
-		resp := <-responseCh
-		err = server.Send([]byte(resp))
-		if err != nil {
-			r.logger.WithError(err).Error("error responding over zmq socket")
-		}
-	}
+	go r.handle(msgCh)
 	return nil
 }
 
-func (r *Router) Shutdown() error {
+func (r *Router) handle(msgCh <-chan []byte) {
+	for msg := range msgCh {
+		_ = msg
+		// handle msg
+		resp := "OK"
+
+		err := r.server.Send([]byte(resp))
+		if err != nil {
+			r.logger.WithError(err).Error("Error sending response via nanomsg")
+		}
+	}
+}
+
+func (r *Router) Close() error {
 	if r.running == nil {
 		return errors.New("router not running")
 	}

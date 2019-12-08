@@ -1,37 +1,41 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/nanomsg"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
-	zmq "github.com/zeromq/gomq"
-	"github.com/zeromq/gomq/zmtp"
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	s := make(chan os.Signal)
+	signal.Notify(s, syscall.SIGTERM, os.Interrupt)
+	go func() {
+		<-s
+		cancel()
+	}()
+
 	logger := log.NewLogger("cleanarch-hexagon-demo-client")
-	client := zmq.NewClient(zmtp.NewSecurityNull())
-	defer client.Close()
-
-	err := client.Connect("tcp://localhost:5555")
+	client, err := nanomsg.NewClient(ctx, logger, "localhost:5555")
 	if err != nil {
-		logger.WithError(err).Error("could not connect to service")
+		logger.WithError(err).Error("Error creating nanomsg client")
 		return
 	}
 
-	err = client.Send([]byte(strings.Join(os.Args[1:], " ")))
+	msg := strings.Join(os.Args[1:], " ")
+
+	resp, err := client.Send([]byte(msg))
 	if err != nil {
-		logger.WithError(err).Error("error sending command to server")
-		return
+		logger.WithError(err).Error("Error sending message via nanomsg")
 	}
 
-	b, err := client.Recv()
-	if err != nil {
-		logger.WithError(err).Error("error receiving response from server")
-		return
-	}
-	logger.Info("Received response from server")
-	fmt.Println(string(b))
+	fmt.Println(string(resp))
 }
