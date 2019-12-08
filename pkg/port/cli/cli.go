@@ -35,10 +35,33 @@ func (r *Router) Run(ctx context.Context) {
 	fmt.Println("Enter command or type 'help' to show available commands.")
 	ctx, r.cancelFn = context.WithCancel(ctx)
 
-	scanner := bufio.NewScanner(os.Stdin)
 	r.running = make(chan struct{})
 	defer close(r.running)
+	for cmd := range r.commands(ctx) {
+		// handle cmd
+		fmt.Println("CMD: " + cmd)
+	}
+}
+
+func (r Router) commands(ctx context.Context) <-chan string {
+	commandsCh := make(chan string)
+	go r.listen(ctx, commandsCh)
+	go func() {
+		<-ctx.Done()
+		close(commandsCh)
+	}()
+	return commandsCh
+}
+
+func (r Router) listen(ctx context.Context, commandsCh chan string) {
+	scanner := bufio.NewScanner(os.Stdin)
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		scanner.Scan()
 		if scanner.Err() != nil {
 			// nevermind any errors
@@ -49,15 +72,7 @@ func (r *Router) Run(ctx context.Context) {
 			continue
 		}
 
-		// handle cmd
-		fmt.Println("CMD: " + text)
-
-		select {
-		case <-ctx.Done():
-			fmt.Println("Interrupted CLI router")
-			return
-		default:
-		}
+		commandsCh <- text
 	}
 }
 
