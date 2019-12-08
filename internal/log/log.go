@@ -33,8 +33,10 @@ type logrusLogger struct {
 
 // NewLogger is an implementation of Logger by sirupsen/logrus.
 func NewLogger(name string) Logger {
+	l := logrus.New()
+	l.SetLevel(logrus.DebugLevel)
 	return &logrusLogger{
-		entry: logrus.NewEntry(logrus.New()).WithField("name", name),
+		entry: logrus.NewEntry(l).WithField("name", name),
 	}
 }
 

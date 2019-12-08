@@ -1,22 +1,26 @@
 package cli
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
-	"os"
 
+	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
+
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	zmq "github.com/zeromq/gomq"
+	"github.com/zeromq/gomq/zmtp"
 )
 
 type Router struct {
 	cancelFn func()
 	running  chan struct{}
 	rootCmd  *cobra.Command
+	logger   log.Logger
+	address  string
 }
 
-func NewRouter() *Router {
+func NewRouter(logger log.Logger, address string) *Router {
 	rootCmd := &cobra.Command{
 		Use:   "cleanarch-demo",
 		Short: "Execute application commands/queries from CLI",
@@ -26,6 +30,8 @@ func NewRouter() *Router {
 	}
 	return &Router{
 		rootCmd: rootCmd,
+		logger:  logger,
+		address: address,
 	}
 }
 
@@ -37,43 +43,57 @@ func (r *Router) Run(ctx context.Context) {
 
 	r.running = make(chan struct{})
 	defer close(r.running)
-	for cmd := range r.commands(ctx) {
-		// handle cmd
-		fmt.Println("CMD: " + cmd)
-	}
-}
-
-func (r Router) commands(ctx context.Context) <-chan string {
 	commandsCh := make(chan string)
-	go r.listen(ctx, commandsCh)
+	responseCh := make(chan string)
+	go func() {
+		err := r.listen(ctx, commandsCh, responseCh)
+		if err != nil {
+
+		}
+	}()
 	go func() {
 		<-ctx.Done()
 		close(commandsCh)
+		close(responseCh)
 	}()
-	return commandsCh
+
+	for cmd := range commandsCh {
+		r.logger.WithField("cmd", cmd).Debug("command received")
+
+		// handle cmd
+		resp := "OK"
+		responseCh <- resp
+	}
 }
 
-func (r Router) listen(ctx context.Context, commandsCh chan string) {
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		scanner.Scan()
-		if scanner.Err() != nil {
-			// nevermind any errors
-			continue
-		}
-		text := scanner.Text()
-		if text == "" {
-			continue
-		}
-
-		commandsCh <- text
+func (r Router) listen(ctx context.Context, commandsCh, responseCh chan string) error {
+	server := zmq.NewServer(zmtp.NewSecurityNull())
+	_, err := server.Bind(r.address)
+	if err != nil {
+		return errors.Wrap(err, "could not bind zmq server")
 	}
+	go func() {
+		<-ctx.Done()
+		server.Close()
+	}()
+
+	if err != nil {
+		return errors.Wrap(err, "could not bind socket to address")
+	}
+
+	for cmd := range server.RecvChannel() {
+		if cmd.MessageType != zmtp.UserMessage {
+			continue
+		}
+		r.logger.WithField("msg", fmt.Sprintf("%+v", cmd)).Debug("command received")
+		commandsCh <- string(cmd.Body[0])
+		resp := <-responseCh
+		err = server.Send([]byte(resp))
+		if err != nil {
+			r.logger.WithError(err).Error("error responding over zmq socket")
+		}
+	}
+	return nil
 }
 
 func (r *Router) Shutdown() error {
