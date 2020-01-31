@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"strings"
+
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/nanomsg"
@@ -13,13 +17,17 @@ import (
 type Router struct {
 	cancelFn func()
 	running  chan struct{}
-	rootCmd  *cobra.Command
-	logger   log.Logger
-	address  string
-	server   *nanomsg.Server
+
+	rootCmd *cobra.Command
+
+	app    *app.Application
+	logger log.Logger
+
+	address string
+	server  *nanomsg.Server
 }
 
-func NewRouter(logger log.Logger, address string) *Router {
+func NewRouter(logger log.Logger, app *app.Application, address string) *Router {
 	rootCmd := &cobra.Command{
 		Use:   "cleanarch-demo",
 		Short: "Execute application commands/queries from CLI",
@@ -29,6 +37,7 @@ func NewRouter(logger log.Logger, address string) *Router {
 	}
 	return &Router{
 		rootCmd: rootCmd,
+		app:     app,
 		logger:  logger,
 		address: address,
 	}
@@ -58,15 +67,36 @@ func (r *Router) Run(ctx context.Context) error {
 
 func (r *Router) handle(msgCh <-chan []byte) {
 	for msg := range msgCh {
-		_ = msg
-		// handle msg
-		resp := "OK"
+		args := strings.Split(string(msg), " ")
 
-		err := r.server.Send([]byte(resp))
+		cmd, args, err := r.rootCmd.Traverse(args)
+		if err != nil {
+			resp := errors.Wrap(err, "error parsing command").Error()
+			err = r.server.Send([]byte(resp))
+			if err != nil {
+				r.logger.WithError(err).Error("Error sending response via nanomsg")
+			}
+		}
+
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+
+		err = cmd.Execute()
+		if err != nil {
+			resp := errors.Wrap(err, "error executing command").Error()
+			err = r.server.Send([]byte(resp))
+			if err != nil {
+				r.logger.WithError(err).Error("Error sending response via nanomsg")
+			}
+		}
+
+		err = r.server.Send(buf.Bytes())
 		if err != nil {
 			r.logger.WithError(err).Error("Error sending response via nanomsg")
 		}
 	}
+
+	r.logger.Info("Message handling stopped")
 }
 
 func (r *Router) Close() error {

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app"
+
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/port/cli"
 
 	bookCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
@@ -22,14 +24,7 @@ import (
 type Service struct {
 	Logger log.Logger
 
-	ListBooksQueryHandler  bookQuery.ListBooksQueryHandler
-	AddBookCommandHandler  bookCommand.AddBookCommandHandler
-	LoanBookCommandHandler bookCommand.LoanBookCommandHandler
-
-	ListReadersQueryHandler        readerQuery.ListReadersQueryHandler
-	AddReaderCommandHandler        readerCommand.AddReaderCommandHandler
-	ActivateReaderCommandHandler   readerCommand.ActivateReaderCommandHandler
-	DeactivateReaderCommandHandler readerCommand.DeactivateReaderCommandHandler
+	App *app.Application
 
 	onStartup  []startupCallback
 	onShutdown []shutdownCallback
@@ -71,19 +66,25 @@ func NewService(ctx context.Context) *Service {
 
 	// Here, we construct and inject all dependencies manually. However, in a larger project, this becomes increasingly hard.
 	// In this case, some kind of automated DI approach is preferred, for example github.com/google/wire.
-	service.ListBooksQueryHandler = bookQuery.NewListBooksQueryHandler(service.Logger, bookRepository)
-	service.AddBookCommandHandler = bookCommand.NewAddBookCommandHandler(service.Logger, bookRepository)
-	service.LoanBookCommandHandler = bookCommand.NewLoanBookCommandHandler(service.Logger, bookRepository, readerRepository)
-
-	service.ListReadersQueryHandler = readerQuery.NewListReadersQueryHandler(service.Logger, readerRepository)
-	service.AddReaderCommandHandler = readerCommand.NewAddReaderCommandHandler(service.Logger, readerRepository)
-	service.ActivateReaderCommandHandler = readerCommand.NewActivateReaderCommandHandler(service.Logger, readerRepository)
-	service.DeactivateReaderCommandHandler = readerCommand.NewDeactivateReaderCommandHandler(service.Logger, readerRepository)
+	// Also, it allows us to initialize each application handler per request, which aids e.g. with tracing and transactions.
+	service.App = &app.Application{
+		Queries: &app.Queries{
+			ListBooks:   bookQuery.NewListBooksQueryHandler(service.Logger, bookRepository),
+			ListReaders: readerQuery.NewListReadersQueryHandler(service.Logger, readerRepository),
+		},
+		Commands: &app.Commands{
+			AddBook:          bookCommand.NewAddBookCommandHandler(service.Logger, bookRepository),
+			LoanBook:         bookCommand.NewLoanBookCommandHandler(service.Logger, bookRepository, readerRepository),
+			AddReader:        readerCommand.NewAddReaderCommandHandler(service.Logger, readerRepository),
+			ActivateReader:   readerCommand.NewActivateReaderCommandHandler(service.Logger, readerRepository),
+			DeactivateReader: readerCommand.NewDeactivateReaderCommandHandler(service.Logger, readerRepository),
+		},
+	}
 
 	// Initialize the ports.
 	// There is a single simple CLI router that is running while the application lives
 	// It captures text from a socket with zeroMQ, and runs cobra commands with the text.
-	cliRouter := cli.NewRouter(service.Logger, "localhost:5555")
+	cliRouter := cli.NewRouter(service.Logger, service.App, "localhost:5555")
 	service.onStartupShutdown(
 		cliRouter.Run,
 		cliRouter.Close,
