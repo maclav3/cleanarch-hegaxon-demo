@@ -4,6 +4,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
 	domain "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book"
@@ -21,9 +22,10 @@ func (r *Router) addBookCmd() *cobra.Command {
 		Use:   "add",
 		Short: "Add a new book to the directory",
 		RunE: func(c *cobra.Command, args []string) error {
-			author := c.Flags().String("author", "", "the author of the book")
-			title := c.Flags().String("title", "", "the title of the book")
-			err := c.ParseFlags(args)
+			flags := pflag.NewFlagSet("add-book", pflag.ContinueOnError)
+			author := flags.String("author", "", "the author of the book")
+			title := flags.String("title", "", "the title of the book")
+			err := flags.Parse(args)
 			if err != nil {
 				return errors.Wrap(err, "error parsing flags")
 			}
