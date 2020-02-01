@@ -35,12 +35,15 @@ func NewRouter(logger log.Logger, app *app.Application, address string) *Router 
 			"It parses arguments from the command line, " +
 			"executes application commands/queries and marshals the output to stdout.",
 	}
-	return &Router{
+	r := &Router{
 		rootCmd: rootCmd,
 		app:     app,
 		logger:  logger,
 		address: address,
 	}
+	r.registerBookCommands()
+
+	return r
 }
 
 // Run starts the Router router and keeps parsing commands from the standard input.
@@ -69,7 +72,7 @@ func (r *Router) handle(msgCh <-chan []byte) {
 	for msg := range msgCh {
 		args := strings.Split(string(msg), " ")
 
-		cmd, args, err := r.rootCmd.Traverse(args)
+		cmd, args, err := r.rootCmd.Find(args)
 		if err != nil {
 			resp := errors.Wrap(err, "error parsing command").Error()
 			err = r.server.Send([]byte(resp))
@@ -81,7 +84,7 @@ func (r *Router) handle(msgCh <-chan []byte) {
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
 
-		err = cmd.Execute()
+		err = cmd.RunE(cmd, args)
 		if err != nil {
 			resp := errors.Wrap(err, "error executing command").Error()
 			err = r.server.Send([]byte(resp))
