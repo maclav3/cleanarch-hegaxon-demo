@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/nanomsg"
 
@@ -14,7 +15,7 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	s := make(chan os.Signal)
 	signal.Notify(s, syscall.SIGTERM, os.Interrupt)

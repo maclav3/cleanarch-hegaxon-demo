@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/spf13/pflag"
+
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
@@ -83,14 +85,21 @@ func (r *Router) handle(msgCh <-chan []byte) {
 
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
+		cmd.SetErr(&buf)
 
-		err = cmd.RunE(cmd, args)
-		if err != nil {
+		if cmd.RunE == nil {
+			err = cmd.Help()
+		} else {
+			err = cmd.RunE(cmd, args)
+		}
+
+		if errors.Cause(err) == pflag.ErrHelp {
+			_ = cmd.Help()
+		} else if err != nil {
+			r.logger.WithError(err).Error("Error executing command")
+			buf.Reset()
 			resp := errors.Wrap(err, "error executing command").Error()
-			err = r.server.Send([]byte(resp))
-			if err != nil {
-				r.logger.WithError(err).Error("Error sending response via nanomsg")
-			}
+			_, _ = buf.Write([]byte(resp))
 		}
 
 		err = r.server.Send(buf.Bytes())

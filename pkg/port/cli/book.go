@@ -18,13 +18,14 @@ func (r *Router) bookCmd() *cobra.Command {
 }
 
 func (r *Router) addBookCmd() *cobra.Command {
-	return &cobra.Command{
+	c := &cobra.Command{
 		Use:   "add",
 		Short: "Add a new book to the directory",
 		RunE: func(c *cobra.Command, args []string) error {
 			flags := pflag.NewFlagSet("add-book", pflag.ContinueOnError)
 			author := flags.String("author", "", "the author of the book")
 			title := flags.String("title", "", "the title of the book")
+
 			err := flags.Parse(args)
 			if err != nil {
 				return errors.Wrap(err, "error parsing flags")
@@ -40,13 +41,20 @@ func (r *Router) addBookCmd() *cobra.Command {
 				return errors.Wrap(err, "error calling add book command handler")
 			}
 
-			_, err = c.OutOrStdout().Write([]byte("OK"))
+			_, err = c.OutOrStdout().Write([]byte("ID: " + cmd.ID.String()))
 			if err != nil {
 				return errors.Wrap(err, "error writing OK response")
 			}
 			return nil
 		},
 	}
+	// this is duplicated so that the flags may be known without running the command
+	// for generalized treatment of the `-h` flag.
+	// todo: this could be done in a prettier way; or go-generated
+	c.Flags().String("author", "", "the author of the book")
+	c.Flags().String("title", "", "the title of the book")
+
+	return c
 }
 
 func (r *Router) registerBookCommands() {
