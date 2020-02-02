@@ -27,6 +27,7 @@ func main() {
 	}()
 
 	logger := log.NewLogger("cleanarch-hexagon-demo-client")
+	// todo: define a proper client in the cli package
 	client, err := nanomsg.NewClient(ctx, logger, "localhost:5555")
 	if err != nil {
 		logger.WithError(err).Error("Error creating nanomsg client")
