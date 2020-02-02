@@ -1,7 +1,12 @@
 package cli
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/gofrs/uuid"
+	app "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -57,10 +62,69 @@ func (r *Router) addBookCmd() *cobra.Command {
 	return c
 }
 
+func (r *Router) listBooksCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "list",
+		Short: "List existing books in the directory",
+		RunE: func(c *cobra.Command, args []string) error {
+			flags := pflag.NewFlagSet("add-book", pflag.ContinueOnError)
+			loaned := flags.String("loaned", "y/n or empty", "'y' for loaned only, 'n' for not loaned only; all otherwise")
+			*loaned = strings.ToLower(strings.TrimSpace(*loaned))
+
+			err := flags.Parse(args)
+			if err != nil {
+				return errors.Wrap(err, "error parsing flags")
+			}
+
+			var loanedParam *bool
+			if *loaned == "y" {
+				loanedParam = new(bool)
+				*loanedParam = true
+			} else if *loaned == "n" {
+				loanedParam = new(bool)
+				*loanedParam = false
+			}
+
+			books, err := r.app.Queries.ListBooks.Query(app.ListQuery{
+				Loaned: loanedParam,
+			})
+			if err != nil {
+				return errors.Wrap(err, "error querying for books")
+			}
+
+			table := tablewriter.NewWriter(c.OutOrStdout())
+			table.SetHeader([]string{"#", "ID", "Title", "Author", "Loaned"})
+			for i, book := range books {
+				table.Append([]string{
+					strconv.Itoa(i),
+					book.ID().String(),
+					book.Title(),
+					book.Author(),
+					boolToString(book.Loaned()),
+				})
+			}
+
+			table.Render()
+			return nil
+		},
+	}
+
+	c.Flags().String("loaned", "y/n or empty", "'y' for loaned only, 'n' for not loaned only; all otherwise")
+	return c
+}
+
+func boolToString(b bool) string {
+	if b {
+		return "YES"
+	}
+	return "NO"
+}
+
 func (r *Router) registerBookCommands() {
 	// IDEA: it would be a good idea to `go generate` the commands and their args from the app layer
 	// It might be tricky to parse the args into correct types, but should be doable
 	bookCmd := r.bookCmd()
+	bookCmd.AddCommand(r.listBooksCmd())
 	bookCmd.AddCommand(r.addBookCmd())
 
 	r.rootCmd.AddCommand(bookCmd)

@@ -5,16 +5,16 @@ import (
 	"context"
 	"strings"
 
-	"github.com/spf13/pflag"
-
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app"
-
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/nanomsg"
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+const MessageBreak byte = 0x29
 
 type Router struct {
 	cancelFn func()
@@ -72,43 +72,48 @@ func (r *Router) Run(ctx context.Context) error {
 
 func (r *Router) handle(msgCh <-chan []byte) {
 	for msg := range msgCh {
-		args := strings.Split(string(msg), " ")
-
-		cmd, args, err := r.rootCmd.Find(args)
+		args := splitArgs(msg)
+		err := r.handleMsg(args)
 		if err != nil {
-			resp := errors.Wrap(err, "error parsing command").Error()
-			err = r.server.Send([]byte(resp))
+			r.logger.WithError(err).Error("Error handling message")
+			err = r.server.Send([]byte(err.Error()))
 			if err != nil {
 				r.logger.WithError(err).Error("Error sending response via nanomsg")
 			}
 		}
-
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		cmd.SetErr(&buf)
-
-		if cmd.RunE == nil {
-			err = cmd.Help()
-		} else {
-			err = cmd.RunE(cmd, args)
-		}
-
-		if errors.Cause(err) == pflag.ErrHelp {
-			_ = cmd.Help()
-		} else if err != nil {
-			r.logger.WithError(err).Error("Error executing command")
-			buf.Reset()
-			resp := errors.Wrap(err, "error executing command").Error()
-			_, _ = buf.Write([]byte(resp))
-		}
-
-		err = r.server.Send(buf.Bytes())
-		if err != nil {
-			r.logger.WithError(err).Error("Error sending response via nanomsg")
-		}
 	}
 
 	r.logger.Info("Message handling stopped")
+}
+
+func (r *Router) handleMsg(args []string) error {
+	cmd, args, err := r.rootCmd.Find(args)
+	if err != nil {
+		return errors.Wrap(err, "error parsing command")
+	}
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	if cmd.RunE == nil {
+		err = cmd.Help()
+	} else {
+		err = cmd.RunE(cmd, args)
+	}
+
+	if errors.Cause(err) == pflag.ErrHelp {
+		_ = cmd.Help()
+	} else if err != nil {
+		return errors.Wrap(err, "error executing command")
+	}
+
+	err = r.server.Send(buf.Bytes())
+	if err != nil {
+		return errors.Wrap(err, "error writing reply to client")
+	}
+
+	return nil
 }
 
 func (r *Router) Close() error {
@@ -118,4 +123,21 @@ func (r *Router) Close() error {
 	r.cancelFn()
 	<-r.running
 	return nil
+}
+
+func splitArgs(msg []byte) []string {
+	args := []string{}
+
+	var sb strings.Builder
+	for _, b := range msg {
+		if b == MessageBreak {
+			args = append(args, sb.String())
+			sb.Reset()
+			continue
+		}
+
+		_ = sb.WriteByte(b)
+	}
+
+	return args
 }

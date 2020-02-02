@@ -7,7 +7,7 @@ import (
 )
 
 type ListBooksQueryHandler interface {
-	Query(cmd ListQuery) ([]*book.Book, error)
+	Query(q ListQuery) ([]*book.Book, error)
 }
 
 type listBooksQueryHandler struct {

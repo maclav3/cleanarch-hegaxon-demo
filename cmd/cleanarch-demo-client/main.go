@@ -1,13 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
+
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/port/cli"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/nanomsg"
 
@@ -31,9 +33,20 @@ func main() {
 		return
 	}
 
-	msg := strings.Join(os.Args[1:], " ")
+	var msg bytes.Buffer
+	for _, arg := range os.Args[1:] {
+		_, err = msg.WriteString(arg)
+		if err != nil {
+			panic(err)
+		}
 
-	resp, err := client.Send([]byte(msg))
+		err = msg.WriteByte(cli.MessageBreak)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	resp, err := client.Send(msg.Bytes())
 	if err != nil {
 		logger.WithError(err).Error("Error sending message via nanomsg")
 	}
