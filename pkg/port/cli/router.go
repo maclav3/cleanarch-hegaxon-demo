@@ -45,6 +45,7 @@ func NewRouter(logger log.Logger, app *app.Application, address string) *Router 
 		address: address,
 	}
 	r.registerBookCommands()
+	r.registerReaderCommands()
 
 	return r
 }
