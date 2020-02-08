@@ -14,7 +14,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const MessageBreak byte = 0x29
+// argsSeparator separates os.Args sent in a command to the server.
+const argsSeparator byte = 0x29
 
 type Router struct {
 	cancelFn func()
@@ -130,7 +131,7 @@ func splitArgs(msg []byte) []string {
 
 	var sb strings.Builder
 	for _, b := range msg {
-		if b == MessageBreak {
+		if b == argsSeparator {
 			args = append(args, sb.String())
 			sb.Reset()
 			continue

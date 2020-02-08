@@ -5,19 +5,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app"
-
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/port/cli"
-
-	bookCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
-	bookQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
-
-	readerCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/reader"
-	readerQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/reader"
-
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 	adaptersBook "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/book"
 	adaptersReader "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/reader"
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app"
+	bookCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
+	readerCommand "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/reader"
+	bookQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
+	readerQuery "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/reader"
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/port/cli"
+
 	"github.com/pkg/errors"
 )
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,8 +9,6 @@ import (
 	"time"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/port/cli"
-
-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/nanomsg"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
 )
@@ -27,29 +24,16 @@ func main() {
 	}()
 
 	logger := log.NewLogger("cleanarch-hexagon-demo-client")
-	// todo: define a proper client in the cli package
-	client, err := nanomsg.NewClient(ctx, logger, "localhost:5555")
+	client, err := cli.NewClient(logger, "localhost:5555")
 	if err != nil {
-		logger.WithError(err).Error("Error creating nanomsg client")
-		return
+		logger.WithError(err).Error("error creating cli client")
+		os.Exit(1)
 	}
 
-	var msg bytes.Buffer
-	for _, arg := range os.Args[1:] {
-		_, err = msg.WriteString(arg)
-		if err != nil {
-			panic(err)
-		}
-
-		err = msg.WriteByte(cli.MessageBreak)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	resp, err := client.Send(msg.Bytes())
+	resp, err := client.SendCmdFromArgs(ctx)
 	if err != nil {
-		logger.WithError(err).Error("Error sending message via nanomsg")
+		logger.WithError(err).Error("error sending command")
+		os.Exit(1)
 	}
 
 	fmt.Println(string(resp))
