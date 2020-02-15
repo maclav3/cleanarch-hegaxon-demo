@@ -1,0 +1,257 @@
+diff --git a/pkg/adapters/reader/memory_repository.go b/pkg/adapters/reader/memory_repository.go
+index 5a86e69..2defa56 100644
+--- a/pkg/adapters/reader/memory_repository.go
++++ b/pkg/adapters/reader/memory_repository.go
+@@ -29,6 +29,18 @@ func (m *MemoryRepository) Save(r *reader.Reader) error {
+ }
+ 
+ func (m *MemoryRepository) ListReaders(q query.ListQuery) ([]*reader.Reader, error) {
+-	// todo: implement
+-	return nil, nil
++	rdrs := []*reader.Reader{}
++	for _, reader := range m.readers {
++		if q.Activated == nil {
++			rdrs = append(rdrs, reader)
++			continue
++		}
++
++		if *q.Activated == reader.Active() {
++			rdrs = append(rdrs, reader)
++			continue
++		}
++	}
++
++	return rdrs, nil
+ }
+diff --git a/pkg/app/query/reader/list.go b/pkg/app/query/reader/list.go
+index a588ea7..d41f765 100644
+--- a/pkg/app/query/reader/list.go
++++ b/pkg/app/query/reader/list.go
+@@ -3,6 +3,7 @@ package reader
+ import (
+ 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
+ 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
++	"github.com/pkg/errors"
+ )
+ 
+ type ListReadersQueryHandler interface {
+@@ -18,6 +19,8 @@ type listReadersRepository interface {
+ }
+ 
+ type ListQuery struct {
++	// Activated, if not-nil, will filter readers by their activated/deactivated status.
++	Activated *bool
+ }
+ 
+ func NewListReadersQueryHandler(logger log.Logger, repo listReadersRepository) ListReadersQueryHandler {
+@@ -40,5 +43,10 @@ func NewListReadersQueryHandler(logger log.Logger, repo listReadersRepository) L
+ }
+ 
+ func (h *listReadersQueryHandler) Query(q ListQuery) ([]*reader.Reader, error) {
+-	return nil, nil
++	readers, err := h.repo.ListReaders(q)
++	if err != nil {
++		return nil, errors.Wrap(err, "could not list books")
++	}
++
++	return readers, nil
+ }
+diff --git a/pkg/app/query/reader/list_test.go b/pkg/app/query/reader/list_test.go
+new file mode 100644
+index 0000000..b15570b
+--- /dev/null
++++ b/pkg/app/query/reader/list_test.go
+@@ -0,0 +1,82 @@
++package reader_test
++
++import (
++	"testing"
++
++	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
++	adapters "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/reader"
++	query "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/reader"
++	domain "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
++	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader/test"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++func Test_ListReaders(t *testing.T) {
++	readerRepo := adapters.NewMemoryRepository()
++	queryHandler := query.NewListReadersQueryHandler(log.NewNoopLogger(), readerRepo)
++
++	activeReader := test.NewActiveReader(t)
++	require.NoError(t, readerRepo.Save(activeReader))
++
++	inactiveReader := test.NewActiveReader(t)
++	require.NoError(t, inactiveReader.Deactivate())
++	require.NoError(t, readerRepo.Save(inactiveReader))
++
++	testCases := []struct {
++		name              string
++		query             query.ListQuery
++		expectedReaderIDs []domain.ID
++	}{
++		{
++			name: "no_filters",
++			query: query.ListQuery{
++				Activated: nil,
++			},
++			expectedReaderIDs: []domain.ID{
++				activeReader.ID(),
++				inactiveReader.ID(),
++			},
++		},
++		{
++			name: "only_active",
++			query: query.ListQuery{
++				Activated: ptrBool(true),
++			},
++			expectedReaderIDs: []domain.ID{
++				activeReader.ID(),
++			},
++		},
++		{
++			name: "only_inactive",
++			query: query.ListQuery{
++				Activated: ptrBool(false),
++			},
++			expectedReaderIDs: []domain.ID{
++				inactiveReader.ID(),
++			},
++		},
++	}
++
++	for i := range testCases {
++		t.Run(testCases[i].name, func(t *testing.T) {
++			t.Parallel()
++			tc := testCases[i]
++
++			readers, err := queryHandler.Query(tc.query)
++			require.NoError(t, err)
++
++			readerIDs := make([]domain.ID, len(readers))
++			for j := range readers {
++				readerIDs[j] = readers[j].ID()
++			}
++
++			assert.EqualValues(t, tc.expectedReaderIDs, readerIDs)
++		})
++	}
++}
++
++func ptrBool(b bool) *bool {
++	return &b
++}
+diff --git a/pkg/port/cli/reader.go b/pkg/port/cli/reader.go
+index 86227e3..84f181b 100644
+--- a/pkg/port/cli/reader.go
++++ b/pkg/port/cli/reader.go
+@@ -1,10 +1,15 @@
+ package cli
+ 
+ import (
+-	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/reader"
++	"strconv"
++	"strings"
++
++	command "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/reader"
++	query "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/reader"
+ 	domain "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
+ 
+ 	"github.com/gofrs/uuid"
++	"github.com/olekukonko/tablewriter"
+ 	"github.com/pkg/errors"
+ 	"github.com/spf13/cobra"
+ 	"github.com/spf13/pflag"
+@@ -30,7 +35,7 @@ func (r *Router) addReaderCmd() *cobra.Command {
+ 				return errors.Wrap(err, "error parsing flags")
+ 			}
+ 
+-			cmd := reader.Add{
++			cmd := command.Add{
+ 				ID:   domain.ID(uuid.Must(uuid.NewV4()).String()),
+ 				Name: *name,
+ 			}
+@@ -63,7 +68,7 @@ func (r *Router) activateReaderCmd() *cobra.Command {
+ 				return errors.Wrap(err, "error parsing flags")
+ 			}
+ 
+-			cmd := reader.Activate{
++			cmd := command.Activate{
+ 				ID: domain.ID(*id),
+ 			}
+ 			err = r.app.Commands.ActivateReader.Handle(cmd)
+@@ -95,7 +100,7 @@ func (r *Router) deactivateReaderCmd() *cobra.Command {
+ 				return errors.Wrap(err, "error parsing flags")
+ 			}
+ 
+-			cmd := reader.Deactivate{
++			cmd := command.Deactivate{
+ 				ID: domain.ID(*id),
+ 			}
+ 			err = r.app.Commands.DeactivateReader.Handle(cmd)
+@@ -114,11 +119,62 @@ func (r *Router) deactivateReaderCmd() *cobra.Command {
+ 	return c
+ }
+ 
++func (r *Router) listReadersCmd() *cobra.Command {
++	c := &cobra.Command{
++		Use:   "list",
++		Short: "List the readers directory",
++		RunE: func(c *cobra.Command, args []string) error {
++			flags := pflag.NewFlagSet("list-reader", pflag.ContinueOnError)
++			active := flags.String("active", "y/n or empty", "'y' for active only, 'n' for inactive only; all otherwise")
++			*active = strings.ToLower(strings.TrimSpace(*active))
++
++			err := flags.Parse(args)
++			if err != nil {
++				return errors.Wrap(err, "error parsing flags")
++			}
++
++			var activeParam *bool
++			if *active == "y" {
++				activeParam = new(bool)
++				*activeParam = true
++			} else if *active == "n" {
++				activeParam = new(bool)
++				*activeParam = false
++			}
++
++			q := query.ListQuery{
++				Activated: activeParam,
++			}
++			readers, err := r.app.Queries.ListReaders.Query(q)
++			if err != nil {
++				return errors.Wrap(err, "error calling add reader command handler")
++			}
++
++			table := tablewriter.NewWriter(c.OutOrStdout())
++			table.SetHeader([]string{"#", "ID", "Name", "Active"})
++			for i, reader := range readers {
++				table.Append([]string{
++					strconv.Itoa(i),
++					reader.ID().String(),
++					reader.Name(),
++					boolToString(reader.Active()),
++				})
++			}
++
++			table.Render()
++			return nil
++		},
++	}
++	c.Flags().String("active", "y/n or empty", "'y' for active only, 'n' for inactive only; all otherwise")
++	return c
++}
++
+ func (r *Router) registerReaderCommands() {
+ 	readerCmd := r.readerCmd()
+ 	readerCmd.AddCommand(r.addReaderCmd())
+ 	readerCmd.AddCommand(r.activateReaderCmd())
+ 	readerCmd.AddCommand(r.deactivateReaderCmd())
++	readerCmd.AddCommand(r.listReadersCmd())
+ 
+ 	r.rootCmd.AddCommand(readerCmd)
+ }
