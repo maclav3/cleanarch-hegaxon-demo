@@ -29,9 +29,6 @@ func (m *MemoryRepository) Save(r *reader.Reader) error {
 }
 
 func (m *MemoryRepository) ListReaders(q query.ListQuery) ([]*reader.Reader, error) {
-	all := []*reader.Reader{}
-	for _, r := range m.readers {
-		all = append(all, r)
-	}
-	return all, nil
+	// todo: implement
+	return nil, nil
 }
