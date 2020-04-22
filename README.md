@@ -17,9 +17,11 @@ After a *READER* is done reading the book, they must *return* the *BOOK* to the 
 
 ## Exercises
 
-### Exercise 1 – implement the functionality for querying the readers list
+See `_exercises` for examples of exercises to implement on your own.
+Proposed solutions are included, but you are encouraged to formulate your own solutions.
 
-[Exercise 1](https://github.com/maclav3/cleanarch-hegaxon-demo/tree/master/_exercises/01-implement-list-readers) covers adding a new functionality for querying the registry of READERs. Changes in the application, adapters and ports are required.
+Be aware that a lot of real-world complexity is simplified in these exercises.
+Their purpose is to provied an example of how to use the Clean-Architeture inspired coding style, not to 
+deliver a robust and functional system.
+Places where simplifications were made are marked in the code and the solutions.
 
-
-[Exercise 2](more to come)
