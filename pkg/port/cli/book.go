@@ -4,14 +4,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
+
 	"github.com/gofrs/uuid"
-	app "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/command/book"
+	app "github.com/maclav3/cleanarch-hegaxon-demo/pkg/app/query/book"
 	domain "github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book"
 )
 
@@ -113,6 +115,45 @@ func (r *Router) listBooksCmd() *cobra.Command {
 	return c
 }
 
+func (r *Router) loanBookCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "loan",
+		Short: "Loan a new book for a reader",
+		RunE: func(c *cobra.Command, args []string) error {
+			flags := pflag.NewFlagSet("loan-book", pflag.ContinueOnError)
+			bookID := flags.String("book_id", "", "the ID of the book")
+			readerID := flags.String("reader_id", "", "the ID of the reader loaning the book")
+
+			err := flags.Parse(args)
+			if err != nil {
+				return errors.Wrap(err, "error parsing flags")
+			}
+
+			cmd := book.Loan{
+				BookID:   domain.ID(*bookID),
+				ReaderID: reader.ID(*readerID),
+			}
+			err = r.app.Commands.LoanBook.Handle(cmd)
+			if err != nil {
+				return errors.Wrap(err, "error calling add book command handler")
+			}
+
+			_, err = c.OutOrStdout().Write([]byte("Loaned OK"))
+			if err != nil {
+				return errors.Wrap(err, "error writing OK response")
+			}
+			return nil
+		},
+	}
+	// this is duplicated so that the flags may be known without running the command
+	// for generalized treatment of the `-h` flag.
+	// todo: this could be done in a prettier way; or go-generated
+	c.Flags().String("book_id", "", "the ID of the book")
+	c.Flags().String("reader_id", "", "the ID of the reader loaning the book")
+
+	return c
+}
+
 func boolToString(b bool) string {
 	if b {
 		return "YES"
@@ -126,6 +167,7 @@ func (r *Router) registerBookCommands() {
 	bookCmd := r.bookCmd()
 	bookCmd.AddCommand(r.listBooksCmd())
 	bookCmd.AddCommand(r.addBookCmd())
+	bookCmd.AddCommand(r.loanBookCmd())
 
 	r.rootCmd.AddCommand(bookCmd)
 }
