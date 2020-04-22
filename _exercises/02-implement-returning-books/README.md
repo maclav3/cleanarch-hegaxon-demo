@@ -65,3 +65,7 @@ Don't forget to register the new command within the CLI router.
 In this project, we have a very naïve approach to DI, coding all dependency injection by hand.
 However, as the project is still very simple, all that is required is make sure that `Service.App.Commands` has the
 `Return Book` command handler instantiated through the constructor that the app layer should be exposing.
+
+### The solution
+
+See solution.patch for a `git` patch that demonstrates a sample solution.
