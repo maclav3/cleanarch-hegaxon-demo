@@ -42,7 +42,7 @@ func RepositoryTests(t *testing.T, repo book.Repository) {
 		require.NoError(t, err, "expected no error retrieving book from repository")
 		require.False(t, bookFromRepo.Loaned(), "did not expect a new book to be loaned")
 
-		err = bookFromRepo.Loan(r)
+		err = bookFromRepo.Loan(r, book.DefaultLoanPeriod)
 		require.NoError(t, err, "expected no error loaning the book")
 
 		err = repo.Save(bookFromRepo)
@@ -68,7 +68,7 @@ func NewLoanedBook(t *testing.T) *book.Book {
 	require.NoError(t, err, "expected no error creating a new book aggregate")
 
 	r := test.NewActiveReader(t)
-	err = b.Loan(r)
+	err = b.Loan(r, book.DefaultLoanPeriod)
 	require.NoError(t, err)
 	return b
 }

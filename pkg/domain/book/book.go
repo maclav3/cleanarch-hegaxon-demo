@@ -12,6 +12,9 @@ var (
 	ErrAlreadyLoaned = errors.New("book is already loaned")
 	// ErrInactiveReader occurs when an inactive reader tries to loan a book.
 	ErrInactiveReader = errors.New("inactive readers cannot loan books")
+
+	// DefaultLoanPeriod is the typical period to loan a book. Might be overriden for some cases.
+	DefaultLoanPeriod = time.Hour * 24 * 7
 )
 
 // Book represents a book asset that may be loaned by a Reader.
@@ -70,7 +73,7 @@ func (b Book) Loaned() bool {
 	return b.loan != nil
 }
 
-func (b *Book) Loan(forReader *reader.Reader) error {
+func (b *Book) Loan(forReader *reader.Reader, loanPeriod time.Duration) error {
 	// domain rules go here
 	// a book cannot be loaned when it is already loaned to somebody
 	if b.Loaned() {
@@ -82,11 +85,10 @@ func (b *Book) Loan(forReader *reader.Reader) error {
 	}
 
 	from := time.Now()
-	to := from.Add(7 * 24 * time.Hour)
+	to := from.Add(loanPeriod)
 	loan := &Loan{
 		from: from,
-		// TODO: have a domain service with injected loan period
-		to: to,
+		to:   to,
 		// In DDD, we don't store one aggregate within another.
 		// we store only a reference by ID.
 		loanedBy: forReader.ID(),

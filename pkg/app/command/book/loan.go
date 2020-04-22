@@ -83,7 +83,7 @@ func (h *loanBookCommandHandler) Handle(cmd Loan) error {
 		return errors.Wrap(err, "could not find reader by ID")
 	}
 
-	err = b.Loan(r)
+	err = b.Loan(r, book.DefaultLoanPeriod)
 	if err != nil {
 		return errors.Wrap(err, "could not loan book for reader")
 	}
