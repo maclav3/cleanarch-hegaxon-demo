@@ -1,0 +1,288 @@
+From d450e95a6776b8f4495ccb5109fb0ce4fc92148a Mon Sep 17 00:00:00 2001
+From: Maciej Bratek <maciej.bratek@karhoo.com>
+Date: Wed, 22 Apr 2020 21:41:19 +0200
+Subject: [PATCH 1/2] Implementation of ex2
+
+---
+ internal/service/service.go    |  1 +
+ pkg/app/app.go                 |  5 ++-
+ pkg/app/command/book/log.go    | 21 ++++++++++
+ pkg/app/command/book/return.go | 72 ++++++++++++++++++++++++++++++++++
+ pkg/domain/book/book.go        | 13 ++++++
+ pkg/domain/book/book_test.go   | 33 +++++++++++++++-
+ pkg/port/cli/book.go           | 37 +++++++++++++++++
+ 7 files changed, 179 insertions(+), 3 deletions(-)
+ create mode 100644 pkg/app/command/book/return.go
+
+diff --git a/internal/service/service.go b/internal/service/service.go
+index 167ce9c..98188d8 100644
+--- a/internal/service/service.go
++++ b/internal/service/service.go
+@@ -72,6 +72,7 @@ func NewService(ctx context.Context) *Service {
+ 		Commands: &app.Commands{
+ 			AddBook:          bookCommand.NewAddBookCommandHandler(service.Logger, bookRepository),
+ 			LoanBook:         bookCommand.NewLoanBookCommandHandler(service.Logger, bookRepository, readerRepository),
++			ReturnBook:       bookCommand.NewReturnBookCommandHandler(service.Logger, bookRepository),
+ 			AddReader:        readerCommand.NewAddReaderCommandHandler(service.Logger, readerRepository),
+ 			ActivateReader:   readerCommand.NewActivateReaderCommandHandler(service.Logger, readerRepository),
+ 			DeactivateReader: readerCommand.NewDeactivateReaderCommandHandler(service.Logger, readerRepository),
+diff --git a/pkg/app/app.go b/pkg/app/app.go
+index c4c73fb..87eb2bd 100644
+--- a/pkg/app/app.go
++++ b/pkg/app/app.go
+@@ -18,8 +18,9 @@ type Queries struct {
+ }
+ 
+ type Commands struct {
+-	AddBook  bookCommand.AddBookCommandHandler
+-	LoanBook bookCommand.LoanBookCommandHandler
++	AddBook    bookCommand.AddBookCommandHandler
++	LoanBook   bookCommand.LoanBookCommandHandler
++	ReturnBook bookCommand.ReturnBookCommandHandler
+ 
+ 	AddReader        readerCommand.AddReaderCommandHandler
+ 	ActivateReader   readerCommand.ActivateReaderCommandHandler
+diff --git a/pkg/app/command/book/log.go b/pkg/app/command/book/log.go
+index f937ab1..e5185a1 100644
+--- a/pkg/app/command/book/log.go
++++ b/pkg/app/command/book/log.go
+@@ -49,3 +49,24 @@ func (l loanBookCommandHandlerLogger) Handle(cmd Loan) (err error) {
+ 
+ 	return l.wrapped.Handle(cmd)
+ }
++
++type returnBookCommandHandlerLogger struct {
++	logger  log.Logger
++	wrapped ReturnBookCommandHandler
++}
++
++func (l returnBookCommandHandlerLogger) Handle(cmd Return) (err error) {
++	logger := l.logger.
++		WithField(log.CommandHandlerKey, "book.Return").
++		WithJSON(log.CommandKey, cmd)
++	defer func() {
++		if err != nil {
++			logger.WithError(err).Error("Could not return book")
++			return
++		}
++
++		logger.Info("loan book successful")
++	}()
++
++	return l.wrapped.Handle(cmd)
++}
+diff --git a/pkg/app/command/book/return.go b/pkg/app/command/book/return.go
+new file mode 100644
+index 0000000..dc21154
+--- /dev/null
++++ b/pkg/app/command/book/return.go
+@@ -0,0 +1,72 @@
++package book
++
++import (
++	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
++	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book"
++	"github.com/pkg/errors"
++)
++
++type ReturnBookCommandHandler interface {
++	Handle(cmd Return) error
++}
++
++type returnBookCommandHandler struct {
++	bookRepo book.Repository
++}
++
++func NewReturnBookCommandHandler(logger log.Logger, bookRepo book.Repository) ReturnBookCommandHandler {
++	if logger == nil {
++		panic("logger is nil")
++	}
++	if bookRepo == nil {
++		panic("bookRepo is nil")
++	}
++
++	return &returnBookCommandHandlerLogger{
++		logger: logger,
++		wrapped: &returnBookCommandHandler{
++			bookRepo: bookRepo,
++		},
++	}
++}
++
++type Return struct {
++	BookID book.ID
++}
++
++func (cmd Return) validate() error {
++	// we perform some simple data validation on the application layer.
++	// however, it is the responsibility of the  domain layer
++	// to should prohibit any actions that would violate the domain rules.
++	if cmd.BookID.Empty() {
++		return errors.New("book id is empty")
++	}
++
++	return nil
++}
++
++// Return retrieves a book and a reader and makes the return.
++// Note that the app layer mostly orchestrates retrieving the aggregates and calling the domain methods;
++// It is the domain layer that says which actions are allowed and which aren't.
++func (h *returnBookCommandHandler) Handle(cmd Return) error {
++	if err := cmd.validate(); err != nil {
++		return errors.Wrap(err, "invalid command")
++	}
++
++	b, err := h.bookRepo.ByID(cmd.BookID)
++	if err != nil {
++		return errors.Wrap(err, "could not find book by ID")
++	}
++
++	err = b.Return()
++	if err != nil {
++		return errors.Wrap(err, "could not return book for reader")
++	}
++
++	err = h.bookRepo.Save(b)
++	if err != nil {
++		return errors.Wrap(err, "could not save book")
++	}
++
++	return nil
++}
+diff --git a/pkg/domain/book/book.go b/pkg/domain/book/book.go
+index d160633..832338f 100644
+--- a/pkg/domain/book/book.go
++++ b/pkg/domain/book/book.go
+@@ -12,6 +12,8 @@ var (
+ 	ErrAlreadyLoaned = errors.New("book is already loaned")
+ 	// ErrInactiveReader occurs when an inactive reader tries to loan a book.
+ 	ErrInactiveReader = errors.New("inactive readers cannot loan books")
++	// ErrNotLoaned occurs when somebody tries to return a book that is not loaned.
++	ErrNotLoaned = errors.New("book is not loaned")
+ )
+ 
+ // Book represents a book asset that may be loaned by a Reader.
+@@ -95,3 +97,14 @@ func (b *Book) Loan(forReader *reader.Reader) error {
+ 	b.loan = loan
+ 	return nil
+ }
++
++// Return returns the book, cancelling its current loan.
++// It doesn't matter who returns the book, just the fact that it's been returned.
++func (b *Book) Return() error {
++	if !b.Loaned() {
++		return ErrNotLoaned
++	}
++
++	b.loan = nil
++	return nil
++}
+diff --git a/pkg/domain/book/book_test.go b/pkg/domain/book/book_test.go
+index 361d073..d471d3c 100644
+--- a/pkg/domain/book/book_test.go
++++ b/pkg/domain/book/book_test.go
+@@ -3,6 +3,8 @@ package book_test
+ import (
+ 	"testing"
+ 
++	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
++
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+@@ -61,7 +63,36 @@ func TestNewBook(t *testing.T) {
+ 			assert.Equal(t, tc.id, b.ID())
+ 			assert.Equal(t, tc.author, b.Author())
+ 			assert.Equal(t, tc.title, b.Title())
+-			assert.False(t, b.Loaned(), "expected a new book not to be loaned")
+ 		})
+ 	}
+ }
++
++func TestLoanReturn(t *testing.T) {
++	t.Parallel()
++	b, err := book.NewBook(
++		book.ID("1234"),
++		"A. Smiith",
++		"The Wealth of Nations",
++	)
++	require.NoError(t, err)
++	require.False(t, b.Loaned(), "expected a new book not to be loaned")
++
++	r, err := reader.NewReader(
++		reader.ID("321"),
++		"Howard Rourke",
++	)
++	require.NoError(t, err)
++	assert.False(t, r.Active(), "expected a new reader to be inactive")
++	require.Error(t, b.Loan(r), "expected error loaning a book for inactive reader")
++
++	require.NoError(t, r.Activate(), "expected no error activating the reader")
++	assert.True(t, r.Active(), "expected reader to be active now")
++
++	require.NoError(t, b.Loan(r), "expected no error loaning a book")
++	assert.True(t, b.Loaned(), "expected book to be loaned now")
++	require.Error(t, b.Loan(r), "expected error loaning a loaned book")
++
++	require.NoError(t, b.Return(), "expected no error returning a loaned book")
++	assert.False(t, b.Loaned(), "expected book not to be loaned now")
++	require.Error(t, b.Return(), "expected error returning a book that is not loaned")
++}
+diff --git a/pkg/port/cli/book.go b/pkg/port/cli/book.go
+index 7d74955..23bc2d0 100644
+--- a/pkg/port/cli/book.go
++++ b/pkg/port/cli/book.go
+@@ -154,6 +154,42 @@ func (r *Router) loanBookCmd() *cobra.Command {
+ 	return c
+ }
+ 
++func (r *Router) returnBookCmd() *cobra.Command {
++	c := &cobra.Command{
++		Use:   "return",
++		Short: "Return a loaned book",
++		RunE: func(c *cobra.Command, args []string) error {
++			flags := pflag.NewFlagSet("return-book", pflag.ContinueOnError)
++			bookID := flags.String("book_id", "", "the ID of the book")
++
++			err := flags.Parse(args)
++			if err != nil {
++				return errors.Wrap(err, "error parsing flags")
++			}
++
++			cmd := book.Return{
++				BookID: domain.ID(*bookID),
++			}
++			err = r.app.Commands.ReturnBook.Handle(cmd)
++			if err != nil {
++				return errors.Wrap(err, "error calling add book command handler")
++			}
++
++			_, err = c.OutOrStdout().Write([]byte("Book returned OK"))
++			if err != nil {
++				return errors.Wrap(err, "error writing OK response")
++			}
++			return nil
++		},
++	}
++	// this is duplicated so that the flags may be known without running the command
++	// for generalized treatment of the `-h` flag.
++	// todo: this could be done in a prettier way; or go-generated
++	c.Flags().String("book_id", "", "the ID of the book")
++
++	return c
++}
++
+ func boolToString(b bool) string {
+ 	if b {
+ 		return "YES"
+@@ -168,6 +204,7 @@ func (r *Router) registerBookCommands() {
+ 	bookCmd.AddCommand(r.listBooksCmd())
+ 	bookCmd.AddCommand(r.addBookCmd())
+ 	bookCmd.AddCommand(r.loanBookCmd())
++	bookCmd.AddCommand(r.returnBookCmd())
+ 
+ 	r.rootCmd.AddCommand(bookCmd)
+ }
+-- 
+2.26.1
+

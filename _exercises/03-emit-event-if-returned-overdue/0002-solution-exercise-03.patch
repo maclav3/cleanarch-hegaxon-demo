@@ -1,0 +1,436 @@
+From 5b4872e336833f1bdd9ad3a60d400070f4172805 Mon Sep 17 00:00:00 2001
+From: Maciej Bratek <maciej.bratek@karhoo.com>
+Date: Wed, 22 Apr 2020 22:54:07 +0200
+Subject: [PATCH 2/2] Solution for ex 3
+
+---
+ .../README.md                                 | 66 +++++++++++++-
+ internal/service/service.go                   | 10 ++-
+ .../publisher/book_returned_late_noop.go      | 15 ++++
+ pkg/app/command/book/loan.go                  |  2 +-
+ pkg/app/command/book/return.go                | 13 ++-
+ pkg/domain/book/book.go                       | 31 +++++--
+ pkg/domain/book/book_test.go                  | 86 +++++++++++++++++--
+ pkg/domain/book/events.go                     | 19 ++++
+ pkg/domain/book/test/test.go                  |  4 +-
+ 9 files changed, 224 insertions(+), 22 deletions(-)
+ create mode 100644 pkg/adapters/publisher/book_returned_late_noop.go
+ create mode 100644 pkg/domain/book/events.go
+
+diff --git a/_exercises/03-emit-event-if-returned-overdue/README.md b/_exercises/03-emit-event-if-returned-overdue/README.md
+index 63c868d..3b1824d 100644
+--- a/_exercises/03-emit-event-if-returned-overdue/README.md
++++ b/_exercises/03-emit-event-if-returned-overdue/README.md
+@@ -25,6 +25,70 @@ After negotiations with the stakeholders, you agreed to the following schema:
+ 
+ Don't bother using an actual pub/sub implementation. You can use a mock that performs a noop instead.
+ 
++### Notes
++
++In the real life, we will run into a typical challenge that occurs when persisting an aggregate and emitting 
++events.
++We need to ensure that the save and sending the event are performed transactionally.
++
++We don't want to save the aggreagate and not send the event, or send the event that does not correspond
++to the actual persisted state.
++
++The goal of this exercise is to highlight how dependencies may be injected into the domain layer, so we'll
++ignore the difficulties with making the persistence/event store transactionally bound.
++
++Just be aware that this is something that you will need to tackle in real-life applications.
++
++
+ ### How to approach it (don't read for a bigger challenge)
+ 
+-(TO BE CONTINUED)
++#### The domain layer
++
++It's always a good idea to begin with the domain layer, to get a good idea of what we want to achieve.
++
++In this case, we'll need to inject a dependency into the domain layer in the form of a _domain service_.
++
++Define the interface of the event publisher in the domain layer, because we don't want to inject lower layers here.
++The implementation of the event publisher will lay in the adapters layer.
++
++Sometimes, when dealing with time-dependent domain logic, it may be a good idea to
++mock the time provider to make tests easier. The proposed solution skips that for simplicity.
++
++The easiest way to inject a dependency into a domain method is to just accept is as a parameter, like:
++```go
++func (b *Book) Return(publisher BookReturnedLatePublisher) error
++```
++
++Another way would be to have, for example, a domain service for loaning/returning books, something like:
++```go
++type loanReturnService struct {
++    bookReturnedLatePublisher BookReturnedLatePublisher
++}
++
++func (s loanReturnService) LoanBook(b Book, forReader *reader.Reader) error
++func (s loanReturnService) Return(b Book) error
++```
++
++Take your pick, but the solution presented here uses the first method.
++
++Make sure that you have the domain functionality well-covered with tests.
++Use a mock that registers that the event publishing was triggered for the given event, something like
++
++```go
++type bookReturnedLatePublisherMock struct {
++    capturedEvents []BookPublishedLate
++}
++```
++
++#### The application layer and wiring it all up
++
++There was a lot of work in the domain layer, but now it's easy to wrap it up.
++
++Write a noop implementation of the publisher in `adapters`.
++Make the application command handler for `Return` take the publisher in its constructor, and pass it along 
++to the domain method.
++
++Make sure that the dependency injection code injects the proper implementation of the publisher.
++
++### Solution
++ 
+diff --git a/internal/service/service.go b/internal/service/service.go
+index 98188d8..ae81be5 100644
+--- a/internal/service/service.go
++++ b/internal/service/service.go
+@@ -5,6 +5,8 @@ import (
+ 	"sync"
+ 	"time"
+ 
++	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/publisher"
++
+ 	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
+ 	adaptersBook "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/book"
+ 	adaptersReader "github.com/maclav3/cleanarch-hegaxon-demo/pkg/adapters/reader"
+@@ -70,9 +72,11 @@ func NewService(ctx context.Context) *Service {
+ 			ListReaders: readerQuery.NewListReadersQueryHandler(service.Logger, readerRepository),
+ 		},
+ 		Commands: &app.Commands{
+-			AddBook:          bookCommand.NewAddBookCommandHandler(service.Logger, bookRepository),
+-			LoanBook:         bookCommand.NewLoanBookCommandHandler(service.Logger, bookRepository, readerRepository),
+-			ReturnBook:       bookCommand.NewReturnBookCommandHandler(service.Logger, bookRepository),
++			AddBook:  bookCommand.NewAddBookCommandHandler(service.Logger, bookRepository),
++			LoanBook: bookCommand.NewLoanBookCommandHandler(service.Logger, bookRepository, readerRepository),
++			ReturnBook: bookCommand.NewReturnBookCommandHandler(service.Logger, bookRepository, publisher.BookPublisherLateNoopPublisher{
++				service.Logger,
++			}),
+ 			AddReader:        readerCommand.NewAddReaderCommandHandler(service.Logger, readerRepository),
+ 			ActivateReader:   readerCommand.NewActivateReaderCommandHandler(service.Logger, readerRepository),
+ 			DeactivateReader: readerCommand.NewDeactivateReaderCommandHandler(service.Logger, readerRepository),
+diff --git a/pkg/adapters/publisher/book_returned_late_noop.go b/pkg/adapters/publisher/book_returned_late_noop.go
+new file mode 100644
+index 0000000..c3bc348
+--- /dev/null
++++ b/pkg/adapters/publisher/book_returned_late_noop.go
+@@ -0,0 +1,15 @@
++package publisher
++
++import (
++	"github.com/maclav3/cleanarch-hegaxon-demo/internal/log"
++	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/book"
++)
++
++type BookPublisherLateNoopPublisher struct {
++	Logger log.Logger
++}
++
++func (b BookPublisherLateNoopPublisher) PublishBookReturnedLate(event book.BookReturnedLate) error {
++	b.Logger.WithJSON("event", event).Info("Publishing BookReturnedLate")
++	return nil
++}
+diff --git a/pkg/app/command/book/loan.go b/pkg/app/command/book/loan.go
+index 47f297a..ea526b9 100644
+--- a/pkg/app/command/book/loan.go
++++ b/pkg/app/command/book/loan.go
+@@ -83,7 +83,7 @@ func (h *loanBookCommandHandler) Handle(cmd Loan) error {
+ 		return errors.Wrap(err, "could not find reader by ID")
+ 	}
+ 
+-	err = b.Loan(r)
++	err = b.Loan(r, book.DefaultLoanPeriod)
+ 	if err != nil {
+ 		return errors.Wrap(err, "could not loan book for reader")
+ 	}
+diff --git a/pkg/app/command/book/return.go b/pkg/app/command/book/return.go
+index dc21154..579bac1 100644
+--- a/pkg/app/command/book/return.go
++++ b/pkg/app/command/book/return.go
+@@ -11,21 +11,26 @@ type ReturnBookCommandHandler interface {
+ }
+ 
+ type returnBookCommandHandler struct {
+-	bookRepo book.Repository
++	bookRepo                  book.Repository
++	bookReturnedLatePublisher book.BookReturnedLatePublisher
+ }
+ 
+-func NewReturnBookCommandHandler(logger log.Logger, bookRepo book.Repository) ReturnBookCommandHandler {
++func NewReturnBookCommandHandler(logger log.Logger, bookRepo book.Repository, bookReturnedLatePublisher book.BookReturnedLatePublisher) ReturnBookCommandHandler {
+ 	if logger == nil {
+ 		panic("logger is nil")
+ 	}
+ 	if bookRepo == nil {
+ 		panic("bookRepo is nil")
+ 	}
++	if bookReturnedLatePublisher == nil {
++		panic("bookReturnedLatePublisher is nil")
++	}
+ 
+ 	return &returnBookCommandHandlerLogger{
+ 		logger: logger,
+ 		wrapped: &returnBookCommandHandler{
+-			bookRepo: bookRepo,
++			bookRepo:                  bookRepo,
++			bookReturnedLatePublisher: bookReturnedLatePublisher,
+ 		},
+ 	}
+ }
+@@ -58,7 +63,7 @@ func (h *returnBookCommandHandler) Handle(cmd Return) error {
+ 		return errors.Wrap(err, "could not find book by ID")
+ 	}
+ 
+-	err = b.Return()
++	err = b.Return(h.bookReturnedLatePublisher)
+ 	if err != nil {
+ 		return errors.Wrap(err, "could not return book for reader")
+ 	}
+diff --git a/pkg/domain/book/book.go b/pkg/domain/book/book.go
+index 832338f..815d543 100644
+--- a/pkg/domain/book/book.go
++++ b/pkg/domain/book/book.go
+@@ -14,6 +14,9 @@ var (
+ 	ErrInactiveReader = errors.New("inactive readers cannot loan books")
+ 	// ErrNotLoaned occurs when somebody tries to return a book that is not loaned.
+ 	ErrNotLoaned = errors.New("book is not loaned")
++
++	// DefaultLoanPeriod is the typical period to loan a book. Might be overriden for some cases.
++	DefaultLoanPeriod = time.Hour * 24 * 7
+ )
+ 
+ // Book represents a book asset that may be loaned by a Reader.
+@@ -72,7 +75,7 @@ func (b Book) Loaned() bool {
+ 	return b.loan != nil
+ }
+ 
+-func (b *Book) Loan(forReader *reader.Reader) error {
++func (b *Book) Loan(forReader *reader.Reader, loanPeriod time.Duration) error {
+ 	// domain rules go here
+ 	// a book cannot be loaned when it is already loaned to somebody
+ 	if b.Loaned() {
+@@ -84,11 +87,10 @@ func (b *Book) Loan(forReader *reader.Reader) error {
+ 	}
+ 
+ 	from := time.Now()
+-	to := from.Add(7 * 24 * time.Hour)
++	to := from.Add(loanPeriod)
+ 	loan := &Loan{
+ 		from: from,
+-		// TODO: have a domain service with injected loan period
+-		to: to,
++		to:   to,
+ 		// In DDD, we don't store one aggregate within another.
+ 		// we store only a reference by ID.
+ 		loanedBy: forReader.ID(),
+@@ -100,11 +102,30 @@ func (b *Book) Loan(forReader *reader.Reader) error {
+ 
+ // Return returns the book, cancelling its current loan.
+ // It doesn't matter who returns the book, just the fact that it's been returned.
+-func (b *Book) Return() error {
++func (b *Book) Return(publisher BookReturnedLatePublisher) error {
+ 	if !b.Loaned() {
+ 		return ErrNotLoaned
+ 	}
+ 
++	loan := b.loan
+ 	b.loan = nil
++
++	event := BookReturnedLate{
++		BookID:   b.ID(),
++		ReaderID: loan.loanedBy,
++		LoanedTo: loan.to,
++		// might use a custom time provider to have more flexibility, but let's just use time.Now()
++		ReturnedAt: time.Now(),
++	}
++
++	// in real life, making sure that the state is persisted in transaction with publishing this event is very important.
++	// here, we assume that the system is perfect and we can omit this complication.
++	if loan.to.Before(event.ReturnedAt) {
++		err := publisher.PublishBookReturnedLate(event)
++		if err != nil {
++			return errors.Wrap(err, "could not publish BookReturnedLate event")
++		}
++	}
++
+ 	return nil
+ }
+diff --git a/pkg/domain/book/book_test.go b/pkg/domain/book/book_test.go
+index d471d3c..9fb92b9 100644
+--- a/pkg/domain/book/book_test.go
++++ b/pkg/domain/book/book_test.go
+@@ -1,7 +1,9 @@
+ package book_test
+ 
+ import (
++	"sync"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
+ 
+@@ -71,7 +73,7 @@ func TestLoanReturn(t *testing.T) {
+ 	t.Parallel()
+ 	b, err := book.NewBook(
+ 		book.ID("1234"),
+-		"A. Smiith",
++		"A. Smith",
+ 		"The Wealth of Nations",
+ 	)
+ 	require.NoError(t, err)
+@@ -83,16 +85,88 @@ func TestLoanReturn(t *testing.T) {
+ 	)
+ 	require.NoError(t, err)
+ 	assert.False(t, r.Active(), "expected a new reader to be inactive")
+-	require.Error(t, b.Loan(r), "expected error loaning a book for inactive reader")
++	require.Error(t, b.Loan(r, book.DefaultLoanPeriod), "expected error loaning a book for inactive reader")
+ 
+ 	require.NoError(t, r.Activate(), "expected no error activating the reader")
+ 	assert.True(t, r.Active(), "expected reader to be active now")
+ 
+-	require.NoError(t, b.Loan(r), "expected no error loaning a book")
++	require.NoError(t, b.Loan(r, book.DefaultLoanPeriod), "expected no error loaning a book")
+ 	assert.True(t, b.Loaned(), "expected book to be loaned now")
+-	require.Error(t, b.Loan(r), "expected error loaning a loaned book")
++	require.Error(t, b.Loan(r, book.DefaultLoanPeriod), "expected error loaning a loaned book")
+ 
+-	require.NoError(t, b.Return(), "expected no error returning a loaned book")
++	pub := newBookReturnedLateMock()
++	require.NoError(t, b.Return(pub), "expected no error returning a loaned book")
+ 	assert.False(t, b.Loaned(), "expected book not to be loaned now")
+-	require.Error(t, b.Return(), "expected error returning a book that is not loaned")
++	require.Error(t, b.Return(pub), "expected error returning a book that is not loaned")
++}
++
++func TestBookReturnedLate(t *testing.T) {
++	pub := newBookReturnedLateMock()
++	r, err := reader.NewReader("1234", "D. Taggart")
++	require.NoError(t, err)
++	require.NoError(t, r.Activate())
++
++	loanTo := 100 * time.Millisecond
++
++	testCases := []struct {
++		name                   string
++		returnAfter            time.Duration
++		expectBookReturnedLate bool
++	}{
++		{
++			name:                   "book_returned_before_due_date",
++			returnAfter:            50 * time.Millisecond,
++			expectBookReturnedLate: false,
++		},
++		{
++			name:                   "book_returned_after_due_date",
++			returnAfter:            200 * time.Millisecond,
++			expectBookReturnedLate: true,
++		},
++		// we could also test returning at the exact moment of loanTo, but we don't have the required precision,
++		// unless we pass a time provider that can mock the exact time.
++		// however, in real life applications, this level of precision might be overkill.
++	}
++
++	for i := range testCases {
++		tc := testCases[i]
++		t.Run(tc.name, func(t *testing.T) {
++			t.Parallel()
++			bookID := book.ID("book_" + tc.name)
++			b, err := book.NewBook(bookID, "A. Smith", "The Wealth of Nations")
++			require.NoError(t, err)
++
++			require.NoError(t, b.Loan(r, loanTo), "expected no error loaning book")
++			time.Sleep(tc.returnAfter)
++			require.NoError(t, b.Return(pub), "expected no error loaning book")
++
++			if tc.expectBookReturnedLate {
++				event, ok := pub.capturedEvents[bookID]
++				require.True(t, ok)
++				assert.Equal(t, bookID, event.BookID)
++				assert.Equal(t, r.ID(), event.ReaderID)
++				// additional asserts would require a time provider
++			} else {
++				_, ok := pub.capturedEvents[bookID]
++				assert.False(t, ok)
++			}
++		})
++	}
++}
++
++type bookReturnedLateMock struct {
++	lock           *sync.Mutex
++	capturedEvents map[book.ID]book.BookReturnedLate
++}
++
++func newBookReturnedLateMock() *bookReturnedLateMock {
++	return &bookReturnedLateMock{
++		lock:           &sync.Mutex{},
++		capturedEvents: map[book.ID]book.BookReturnedLate{},
++	}
++}
++
++func (b *bookReturnedLateMock) PublishBookReturnedLate(event book.BookReturnedLate) error {
++	b.capturedEvents[event.BookID] = event
++	return nil
+ }
+diff --git a/pkg/domain/book/events.go b/pkg/domain/book/events.go
+new file mode 100644
+index 0000000..da2d0e1
+--- /dev/null
++++ b/pkg/domain/book/events.go
+@@ -0,0 +1,19 @@
++package book
++
++import (
++	"time"
++
++	"github.com/maclav3/cleanarch-hegaxon-demo/pkg/domain/reader"
++)
++
++// BookReturnedLate is an event emitted whenever a book was returned later than the loan due date.
++type BookReturnedLate struct {
++	BookID     ID
++	ReaderID   reader.ID
++	LoanedTo   time.Time
++	ReturnedAt time.Time
++}
++
++type BookReturnedLatePublisher interface {
++	PublishBookReturnedLate(BookReturnedLate) error
++}
+diff --git a/pkg/domain/book/test/test.go b/pkg/domain/book/test/test.go
+index 492f954..8a766b5 100644
+--- a/pkg/domain/book/test/test.go
++++ b/pkg/domain/book/test/test.go
+@@ -42,7 +42,7 @@ func RepositoryTests(t *testing.T, repo book.Repository) {
+ 		require.NoError(t, err, "expected no error retrieving book from repository")
+ 		require.False(t, bookFromRepo.Loaned(), "did not expect a new book to be loaned")
+ 
+-		err = bookFromRepo.Loan(r)
++		err = bookFromRepo.Loan(r, book.DefaultLoanPeriod)
+ 		require.NoError(t, err, "expected no error loaning the book")
+ 
+ 		err = repo.Save(bookFromRepo)
+@@ -68,7 +68,7 @@ func NewLoanedBook(t *testing.T) *book.Book {
+ 	require.NoError(t, err, "expected no error creating a new book aggregate")
+ 
+ 	r := test.NewActiveReader(t)
+-	err = b.Loan(r)
++	err = b.Loan(r, book.DefaultLoanPeriod)
+ 	require.NoError(t, err)
+ 	return b
+ }
+-- 
+2.26.1
+
