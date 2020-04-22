@@ -4,7 +4,7 @@
 
 The demo has implemented commands for adding and activating/deactivating readers.
 
-We've been told that we need a way to list all current users, and optionally filter them by their activated/deactivated state.
+Business tells us that we need a way to list all current users, and optionally filter them by their activated/deactivated state.
 
 ### Goal of the exercise
 
