@@ -30,6 +30,8 @@ func RepositoryTests(t *testing.T, repo book.Repository) {
 	})
 
 	t.Run("save_updates", func(t *testing.T) {
+		// this test checks that the changes to the state of the book are persisted.
+		// it is a cursory test, no sense in checking that every single property is saved.
 		b := NewBook(t)
 		r := test.NewActiveReader(t)
 
